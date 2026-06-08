@@ -9,18 +9,27 @@
 //   0 = Quaternion Julia (animated)   3 = Menger sponge
 //   1 = Mandelbulb (power 8)          4 = Sierpinski tetrahedron
 //   2 = Quaternion Mandelbrot         5 = Burning ship (3D)
+//
+// material_mode selects the surface look:
+//   0 = Glow (emissive palette)       4 = Matcap chrome
+//   1 = Plastic (lit, palette)        5 = Matcap gold
+//   2 = Metal  (reflective)           6 = Matcap pearl
+//   3 = Glass  (fresnel/reflective)
+//
+// The lit pipeline (not unshaded) is what lets Godot's ReflectionProbe and
+// screen-space reflections bounce the real scene off the metal/glass surface.
 shader_type spatial;
-render_mode unshaded, cull_front, depth_draw_always;
+render_mode cull_front, depth_draw_always;
 
 uniform int fractal_type = 0;
+uniform int material_mode = 0;
 uniform int max_steps = 96;
 uniform int iterations = 8;
 uniform float epsilon = 0.0012;
 uniform vec4 julia_c = vec4(-0.45, -0.3, -0.5, 0.2);
 uniform float morph_speed = 0.25;
 uniform float morph_amount = 0.18;
-uniform vec3 color_a : source_color = vec3(0.18, 0.45, 0.95);
-uniform vec3 color_b : source_color = vec3(0.98, 0.35, 0.7);
+uniform sampler2D palette_tex : source_color, hint_default_white;
 uniform vec3 glow_color : source_color = vec3(0.6, 0.85, 1.0);
 uniform float mesh_half = 0.15;      // BoxMesh half-extent (size 0.3 -> 0.15)
 uniform float fractal_extent = 1.3;  // fractal half-size the box maps to
@@ -173,6 +182,17 @@ vec3 calc_normal(vec3 p, vec4 c) {
 	);
 }
 
+// Cheap procedural "matcap": shade from the view-space normal as if lit by a
+// sphere capture. tint/style chosen by the caller for chrome / gold / pearl.
+vec3 procedural_matcap(vec3 nv, vec3 tint, float metal_sheen) {
+	// nv is the view-space normal. Use its xy as the matcap lookup.
+	vec2 m = nv.xy * 0.5 + 0.5;
+	float key = pow(clamp(m.y * 0.6 + 0.5, 0.0, 1.0), 1.5);   // soft top light
+	float rim = pow(1.0 - clamp(nv.z, 0.0, 1.0), 3.0);        // grazing rim
+	float spec = pow(clamp(dot(nv, normalize(vec3(0.4, 0.7, 0.6))), 0.0, 1.0), metal_sheen);
+	return tint * (0.25 + key * 0.8) + vec3(1.0) * spec * 0.9 + tint * rim * 0.6;
+}
+
 // Ray vs axis-aligned box [-b, b]. Returns false if the ray misses.
 bool ray_box(vec3 ro, vec3 rd, float b, out float t_near, out float t_far) {
 	vec3 inv = 1.0 / rd;
@@ -229,18 +249,65 @@ void fragment() {
 		discard;
 	}
 
-	// Shading (object-space normal, lit by a fixed key + fresnel rim).
-	vec3 n = calc_normal(p_obj * scale, c);
-	vec3 light_dir = normalize(vec3(0.4, 0.8, 0.5));
-	float diff = clamp(dot(n, light_dir), 0.0, 1.0);
-	float ambient = 0.25;
-	float fres = pow(1.0 - clamp(dot(n, -rd), 0.0, 1.0), 3.0);
+	// Object-space normal, then into view space for the lit pipeline.
+	vec3 n_obj = calc_normal(p_obj * scale, c);
+	vec3 n_view = normalize((VIEW_MATRIX * MODEL_MATRIX * vec4(n_obj, 0.0)).xyz);
+	NORMAL = n_view;
 
-	vec3 base = mix(color_a, color_b, trap);
-	vec3 col = base * (ambient + diff * 0.9) + glow_color * fres * 0.6;
+	// Palette colour from the orbit trap.
+	vec3 pal = texture(palette_tex, vec2(trap, 0.5)).rgb;
+	float fres = pow(1.0 - clamp(dot(n_view, vec3(0.0, 0.0, 1.0)), 0.0, 1.0), 3.0);
 
-	ALBEDO = col;
-	EMISSION = col * (0.35 + fres * 0.5);
+	if (material_mode == 1) {
+		// Plastic: lit dielectric tinted by the palette.
+		ALBEDO = pal;
+		METALLIC = 0.0;
+		ROUGHNESS = 0.35;
+		SPECULAR = 0.5;
+		EMISSION = pal * 0.05;
+	} else if (material_mode == 2) {
+		// Metal: reflects the real scene via ReflectionProbe + SSR.
+		ALBEDO = mix(pal, vec3(1.0), 0.6);
+		METALLIC = 1.0;
+		ROUGHNESS = 0.08;
+		SPECULAR = 0.5;
+	} else if (material_mode == 3) {
+		// Glass: smooth, strongly reflective dielectric (fresnel-driven).
+		// Not true refraction — reflections only (see notes).
+		ALBEDO = mix(pal * 0.2, vec3(1.0), fres);
+		METALLIC = 0.0;
+		ROUGHNESS = 0.02;
+		SPECULAR = 1.0;
+		EMISSION = glow_color * fres * 0.25;
+	} else if (material_mode == 4) {
+		// Matcap chrome.
+		vec3 m = procedural_matcap(n_view, vec3(0.8, 0.85, 0.95), 24.0);
+		ALBEDO = vec3(0.0);
+		EMISSION = m;
+		METALLIC = 0.0;
+		ROUGHNESS = 1.0;
+	} else if (material_mode == 5) {
+		// Matcap gold.
+		vec3 m = procedural_matcap(n_view, vec3(1.0, 0.75, 0.3), 16.0);
+		ALBEDO = vec3(0.0);
+		EMISSION = m;
+		METALLIC = 0.0;
+		ROUGHNESS = 1.0;
+	} else if (material_mode == 6) {
+		// Matcap pearl.
+		vec3 m = procedural_matcap(n_view, mix(pal, vec3(0.95), 0.5), 8.0);
+		ALBEDO = vec3(0.0);
+		EMISSION = m;
+		METALLIC = 0.0;
+		ROUGHNESS = 1.0;
+	} else {
+		// Glow: emissive palette (the default look).
+		vec3 col = pal * (0.4 + fres * 0.6) + glow_color * fres * 0.5;
+		ALBEDO = vec3(0.0);
+		EMISSION = col;
+		METALLIC = 0.0;
+		ROUGHNESS = 1.0;
+	}
 
 	// Write correct depth so the floor and controllers occlude the fractal.
 	vec3 hit_world = (MODEL_MATRIX * vec4(p_obj, 1.0)).xyz;

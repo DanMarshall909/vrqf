@@ -1,0 +1,9 @@
+[gd_resource type="GradientTexture1D" load_steps=2 format=3 uid="uid://vrqfpalrainbow"]
+
+[sub_resource type="Gradient" id="Grad_rainbow"]
+offsets = PackedFloat32Array(0, 0.25, 0.5, 0.75, 1)
+colors = PackedColorArray(0.6, 0, 0.7, 1, 0, 0.4, 1, 1, 0, 0.9, 0.4, 1, 1, 0.9, 0, 1, 1, 0.2, 0.1, 1)
+
+[resource]
+gradient = SubResource("Grad_rainbow")
+width = 256

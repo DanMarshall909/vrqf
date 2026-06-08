@@ -1,0 +1,9 @@
+[gd_resource type="GradientTexture1D" load_steps=2 format=3 uid="uid://vrqfpalice"]
+
+[sub_resource type="Gradient" id="Grad_ice"]
+offsets = PackedFloat32Array(0, 0.4, 0.75, 1)
+colors = PackedColorArray(0, 0.02, 0.08, 1, 0, 0.3, 0.6, 1, 0.3, 0.7, 0.95, 1, 0.85, 0.97, 1, 1)
+
+[resource]
+gradient = SubResource("Grad_ice")
+width = 256
