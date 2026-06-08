@@ -51,7 +51,10 @@ public partial class Main : Node3D
             c.ButtonPressed += name => { if (name == "menu_button") ToggleAr(); };
     }
 
-    private void ToggleAr()
+    public bool ArAvailable => _passthroughSupported;
+    public bool IsAr => _ar;
+
+    public void ToggleAr()
     {
         if (_passthroughSupported) SetAr(!_ar);
     }

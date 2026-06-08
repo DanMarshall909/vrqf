@@ -2,18 +2,16 @@ using Godot;
 
 namespace Vrqf;
 
-// Drives the Cube's fractal shader from the controllers / keyboard.
+// Owns all of the fractal shader's tweakable settings and applies them to the
+// Cube's ShaderMaterial. Driven by the controllers/keyboard (here) and by the
+// WristMenu UI (which calls the public Cycle*/Adjust* methods), so both stay in
+// sync — the ShaderMaterial is the single source of truth.
 //
 //   Fractal:   VR A/X = next, B/Y = prev              | keyboard F / G
 //   Material:  VR right stick-click                   | keyboard T
 //   Palette:   VR left stick-click                    | keyboard P
 //   Live param select: VR grip (R = next, L = prev)   | keyboard ] / [
-//   Scrub live param:  VR right trigger = up,          | keyboard = / -
-//                          left trigger = down
-//
-// The analog triggers continuously dial the currently-selected parameter:
-// Detail (iterations), Shape (per-fractal shape param), or Speed (morph rate).
-// All three affect every fractal.
+//   Scrub live param:  triggers (right = up)          | keyboard = / -
 public partial class FractalController : MeshInstance3D
 {
     [Export] public NodePath LeftControllerPath { get; set; } = "../XROrigin3D/LeftController";
@@ -53,13 +51,16 @@ public partial class FractalController : MeshInstance3D
     private int _palette;
     private int _liveParam;
 
-    // Live-edited values (kept as floats so the triggers can scrub smoothly).
     private float _iterations;
     private float _morphSpeed;
     private float _shapePhase;
+    private float _zoom;     // fractal_extent
+    private float _quality;  // max_steps
 
     public override void _Ready()
     {
+        AddToGroup("fractal_controller");
+
         _material = GetSurfaceOverrideMaterial(0) as ShaderMaterial
             ?? GetActiveMaterial(0) as ShaderMaterial;
 
@@ -74,6 +75,10 @@ public partial class FractalController : MeshInstance3D
         _iterations = ReadInt("iterations");
         if (_iterations < 2f) _iterations = 8f;
         _morphSpeed = ReadFloat("morph_speed");
+        _zoom = ReadFloat("fractal_extent");
+        if (_zoom <= 0f) _zoom = 1f;
+        _quality = ReadInt("max_steps");
+        if (_quality < 16f) _quality = 96f;
 
         for (int i = 0; i < PalettePaths.Length; i++)
             _palettes[i] = GD.Load<Texture2D>(PalettePaths[i]);
@@ -83,18 +88,34 @@ public partial class FractalController : MeshInstance3D
         if (_left is not null) _left.ButtonPressed += name => OnButtonPressed(name, isLeft: true);
         if (_right is not null) _right.ButtonPressed += name => OnButtonPressed(name, isLeft: false);
 
-        GD.Print($"Fractal: {FractalNames[_fractal]} | Material: {MaterialNames[_materialMode]} | Palette: {PaletteNames[_palette]}");
-        GD.Print("Fractal A/X·B/Y (F/G) | Material R-click (T) | Palette L-click (P) | Param grip (] [) | Scrub triggers (= -)");
+        GD.Print($"Fractal: {FractalName} | Material: {MaterialName} | Palette: {PaletteName}");
     }
+
+    // ----- Display accessors (used by the WristMenu labels).
+    public string FractalName => FractalNames[_fractal];
+    public string MaterialName => MaterialNames[_materialMode];
+    public string PaletteName => PaletteNames[_palette];
+    public string LiveParamName => LiveParamNames[_liveParam];
+    public string DetailText => Mathf.RoundToInt(_iterations).ToString();
+    public string ShapeText => _shapePhase.ToString("0.0");
+    public string SpeedText => _morphSpeed.ToString("0.00");
+    public string ZoomText => _zoom.ToString("0.00");
+    public string QualityText => Mathf.RoundToInt(_quality).ToString();
 
     public override void _Process(double delta)
     {
         if (_material is null) return;
 
-        float input = TriggerInput() + KeyboardScrub();
-        input = Mathf.Clamp(input, -1f, 1f);
-        if (Mathf.Abs(input) > 0.001f)
-            ScrubLiveParam(input * (float)delta);
+        float input = Mathf.Clamp(TriggerInput() + KeyboardScrub(), -1f, 1f);
+        if (Mathf.Abs(input) <= 0.001f) return;
+
+        float step = input * (float)delta;
+        switch (_liveParam)
+        {
+            case 0: AdjustDetail(step * 14f); break;
+            case 1: AdjustShape(step * 1.5f); break;
+            default: AdjustSpeed(step * 1.2f); break;
+        }
     }
 
     private float TriggerInput()
@@ -113,23 +134,56 @@ public partial class FractalController : MeshInstance3D
         return k;
     }
 
-    private void ScrubLiveParam(float step)
+    // ----- Public mutators (controllers + WristMenu both call these).
+    public void CycleFractal(int direction)
     {
-        switch (_liveParam)
-        {
-            case 0: // Detail / iterations
-                _iterations = Mathf.Clamp(_iterations + step * 14f, 2f, 64f);
-                _material!.SetShaderParameter("iterations", Mathf.RoundToInt(_iterations));
-                break;
-            case 1: // Shape — per-fractal defining parameter (power / fold / c sweep)
-                _shapePhase += step * 1.5f;
-                _material!.SetShaderParameter("shape", _shapePhase);
-                break;
-            default: // Speed / morph rate
-                _morphSpeed = Mathf.Clamp(_morphSpeed + step * 1.2f, 0f, 2f);
-                _material!.SetShaderParameter("morph_speed", _morphSpeed);
-                break;
-        }
+        _fractal = Wrap(_fractal + direction, FractalNames.Length);
+        _material?.SetShaderParameter("fractal_type", _fractal);
+    }
+
+    public void CycleMaterial(int direction)
+    {
+        _materialMode = Wrap(_materialMode + direction, MaterialNames.Length);
+        _material?.SetShaderParameter("material_mode", _materialMode);
+    }
+
+    public void CyclePalette(int direction)
+    {
+        _palette = Wrap(_palette + direction, _palettes.Length);
+        _material?.SetShaderParameter("palette_tex", _palettes[_palette]);
+    }
+
+    public void CycleLiveParam(int direction) =>
+        _liveParam = Wrap(_liveParam + direction, LiveParamNames.Length);
+
+    public void AdjustDetail(float delta)
+    {
+        _iterations = Mathf.Clamp(_iterations + delta, 2f, 64f);
+        _material?.SetShaderParameter("iterations", Mathf.RoundToInt(_iterations));
+    }
+
+    public void AdjustShape(float delta)
+    {
+        _shapePhase += delta;
+        _material?.SetShaderParameter("shape", _shapePhase);
+    }
+
+    public void AdjustSpeed(float delta)
+    {
+        _morphSpeed = Mathf.Clamp(_morphSpeed + delta, 0f, 2f);
+        _material?.SetShaderParameter("morph_speed", _morphSpeed);
+    }
+
+    public void AdjustZoom(float delta)
+    {
+        _zoom = Mathf.Clamp(_zoom + delta, 0.3f, 3f);
+        _material?.SetShaderParameter("fractal_extent", _zoom);
+    }
+
+    public void AdjustQuality(float delta)
+    {
+        _quality = Mathf.Clamp(_quality + delta, 16f, 256f);
+        _material?.SetShaderParameter("max_steps", Mathf.RoundToInt(_quality));
     }
 
     private void OnButtonPressed(string name, bool isLeft)
@@ -158,33 +212,6 @@ public partial class FractalController : MeshInstance3D
             case Key.Bracketright: CycleLiveParam(1); break;
             case Key.Bracketleft: CycleLiveParam(-1); break;
         }
-    }
-
-    private void CycleFractal(int direction)
-    {
-        _fractal = Wrap(_fractal + direction, FractalNames.Length);
-        _material!.SetShaderParameter("fractal_type", _fractal);
-        GD.Print($"Fractal {_fractal}: {FractalNames[_fractal]}");
-    }
-
-    private void CycleMaterial(int direction)
-    {
-        _materialMode = Wrap(_materialMode + direction, MaterialNames.Length);
-        _material!.SetShaderParameter("material_mode", _materialMode);
-        GD.Print($"Material {_materialMode}: {MaterialNames[_materialMode]}");
-    }
-
-    private void CyclePalette(int direction)
-    {
-        _palette = Wrap(_palette + direction, _palettes.Length);
-        _material!.SetShaderParameter("palette_tex", _palettes[_palette]);
-        GD.Print($"Palette {_palette}: {PaletteNames[_palette]}");
-    }
-
-    private void CycleLiveParam(int direction)
-    {
-        _liveParam = Wrap(_liveParam + direction, LiveParamNames.Length);
-        GD.Print($"Live param: {LiveParamNames[_liveParam]} (scrub with triggers / = -)");
     }
 
     private int ReadInt(string param)
