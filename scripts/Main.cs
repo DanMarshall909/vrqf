@@ -40,8 +40,9 @@ public partial class Main : Node3D
     // Returns true if the runtime accepts alpha-blend (passthrough) compositing.
     private bool ProbePassthrough()
     {
+        GD.Print("vrqf AR — supported blend modes: ", _xr!.GetSupportedEnvironmentBlendModes());
         var alpha = XRInterface.EnvironmentBlendModeEnum.AlphaBlend;
-        _xr!.EnvironmentBlendMode = alpha;
+        _xr.EnvironmentBlendMode = alpha;
         bool ok = _xr.EnvironmentBlendMode == alpha;
         _xr.EnvironmentBlendMode = XRInterface.EnvironmentBlendModeEnum.Opaque;
         if (!ok)
