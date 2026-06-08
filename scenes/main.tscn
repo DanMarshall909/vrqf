@@ -1,4 +1,4 @@
-[gd_scene load_steps=14 format=3 uid="uid://vrqfmain0"]
+[gd_scene load_steps=15 format=3 uid="uid://vrqfmain0"]
 
 [ext_resource type="Script" path="res://scripts/Main.cs" id="1_main"]
 [ext_resource type="Script" path="res://scripts/FreeLookCamera.cs" id="2_cam"]
@@ -29,6 +29,10 @@ ssr_max_steps = 32
 
 [sub_resource type="BoxMesh" id="Box_1"]
 size = Vector3(0.3, 0.3, 0.3)
+
+[sub_resource type="SphereMesh" id="Sphere_1"]
+radius = 0.15
+height = 0.3
 
 [sub_resource type="BoxMesh" id="CtrlBox_1"]
 size = Vector3(0.05, 0.05, 0.12)
@@ -71,7 +75,7 @@ script = ExtResource("2_cam")
 [node name="Cube" type="MeshInstance3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.3, 0)
 layers = 2
-mesh = SubResource("Box_1")
+mesh = SubResource("Sphere_1")
 surface_material_override/0 = SubResource("Mat_Fractal")
 script = ExtResource("5_fractalctrl")
 

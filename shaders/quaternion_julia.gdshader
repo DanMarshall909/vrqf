@@ -35,8 +35,8 @@ uniform sampler2D palette_tex : source_color, hint_default_white;
 uniform vec3 glow_color : source_color = vec3(0.6, 0.85, 1.0);
 uniform float mesh_half = 0.15;      // BoxMesh half-extent (size 0.3 -> 0.15)
 uniform float fractal_extent = 1.3;  // fractal half-size the box maps to
+uniform float boundary_eps = 0.003;  // trim hits on the box shell (kills edge lines)
 
-varying vec3 v_cam_local;   // camera position in object space
 varying vec3 v_frag_local;  // this fragment's position in object space
 
 // Hamilton product of two quaternions (w, x, y, z).
@@ -195,33 +195,38 @@ vec3 procedural_matcap(vec3 nv, vec3 tint, float metal_sheen) {
 	return tint * (0.25 + key * 0.8) + vec3(1.0) * spec * 0.9 + tint * rim * 0.6;
 }
 
-// Ray vs axis-aligned box [-b, b]. Returns false if the ray misses.
-bool ray_box(vec3 ro, vec3 rd, float b, out float t_near, out float t_far) {
-	vec3 inv = 1.0 / rd;
-	vec3 n = inv * ro;
-	vec3 k = abs(inv) * vec3(b);
-	vec3 t1 = -n - k;
-	vec3 t2 = -n + k;
-	t_near = max(max(t1.x, t1.y), t1.z);
-	t_far = min(min(t2.x, t2.y), t2.z);
-	return t_near <= t_far && t_far > 0.0;
+// Ray vs sphere of radius r centred at the origin (rd must be normalised).
+// A sphere has no edges or corners, so there are no straight clip-lines and
+// no grazing-ray precision artifacts the way an axis-aligned box has.
+bool ray_sphere(vec3 ro, vec3 rd, float r, out float t_near, out float t_far) {
+	float b = dot(ro, rd);
+	float c = dot(ro, ro) - r * r;
+	float h = b * b - c;
+	if (h < 0.0) return false;
+	h = sqrt(h);
+	t_near = -b - h;
+	t_far = -b + h;
+	return t_far > 0.0;
 }
 
 void vertex() {
 	v_frag_local = VERTEX;
-	v_cam_local = (inverse(MODEL_MATRIX) * vec4(CAMERA_POSITION_WORLD, 1.0)).xyz;
 }
 
 void fragment() {
-	// Ray in object space.
-	vec3 ro = v_cam_local;
-	vec3 rd = normalize(v_frag_local - v_cam_local);
+	// Ray in object space. The eye position is taken from INV_VIEW_MATRIX
+	// per-fragment so it is correct PER EYE under VR multiview — precomputing
+	// it in the vertex stage (CAMERA_POSITION_WORLD) gives the mono/centre
+	// camera and collapses the stereo, making the fractal look like it's
+	// painted on the inside of the box.
+	vec3 ro = (inverse(MODEL_MATRIX) * vec4(INV_VIEW_MATRIX[3].xyz, 1.0)).xyz;
+	vec3 rd = normalize(v_frag_local - ro);
 
 	float t_near, t_far;
-	if (!ray_box(ro, rd, mesh_half, t_near, t_far)) {
+	if (!ray_sphere(ro, rd, mesh_half, t_near, t_far)) {
 		discard;
 	}
-	t_near = max(t_near, 0.0); // start at the camera if it is inside the box
+	t_near = max(t_near, 0.0); // start at the camera if it is inside the volume
 
 	// Object -> fractal domain scale.
 	float scale = fractal_extent / mesh_half;
@@ -248,6 +253,13 @@ void fragment() {
 	}
 
 	if (!hit) {
+		discard;
+	}
+
+	// Trim hits sitting on the bounding shell — a fractal surface clipped by
+	// the volume boundary, or a grazing-ray sliver. With a sphere this is a
+	// soft circular crop rather than straight box-edge lines.
+	if (mesh_half - length(p_obj) < boundary_eps) {
 		discard;
 	}
 
