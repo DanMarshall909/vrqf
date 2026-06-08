@@ -66,3 +66,4 @@ openxr/environment_blend_mode=2
 openxr/startup_alert=false
 shaders/enabled=true
 openxr/extensions/meta/passthrough=true
+openxr/extensions/meta/render_model=true
