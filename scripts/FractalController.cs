@@ -118,7 +118,7 @@ public partial class FractalController : MeshInstance3D
         switch (_liveParam)
         {
             case 0: // Detail / iterations
-                _iterations = Mathf.Clamp(_iterations + step * 6f, 2f, 20f);
+                _iterations = Mathf.Clamp(_iterations + step * 14f, 2f, 64f);
                 _material!.SetShaderParameter("iterations", Mathf.RoundToInt(_iterations));
                 break;
             case 1: // Shape — per-fractal defining parameter (power / fold / c sweep)
