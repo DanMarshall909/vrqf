@@ -301,12 +301,13 @@ void vertex() {
 }
 
 void fragment() {
-	// Ray in object space. The eye position is taken from INV_VIEW_MATRIX
-	// per-fragment so it is correct PER EYE under VR multiview — precomputing
-	// it in the vertex stage (CAMERA_POSITION_WORLD) gives the mono/centre
-	// camera and collapses the stereo, making the fractal look like it's
-	// painted on the inside of the box.
-	vec3 ro = (inverse(MODEL_MATRIX) * vec4(INV_VIEW_MATRIX[3].xyz, 1.0)).xyz;
+	// Per-eye ray origin in object space. Under multiview, VIEW_MATRIX is the
+	// CENTRAL camera and the per-eye offset is in EYE_OFFSET (view space), so
+	// fold it in — using INV_VIEW_MATRIX[3] alone gives the mono camera for
+	// both eyes, collapsing the stereo so the fractal looks painted on the
+	// sphere shell. (In flat mode EYE_OFFSET is zero, so this is unchanged.)
+	vec3 cam_world = (INV_VIEW_MATRIX * vec4(EYE_OFFSET, 1.0)).xyz;
+	vec3 ro = (inverse(MODEL_MATRIX) * vec4(cam_world, 1.0)).xyz;
 	vec3 rd = normalize(v_frag_local - ro);
 
 	float t_near, t_far;
