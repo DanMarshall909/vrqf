@@ -1,4 +1,4 @@
-[gd_scene load_steps=15 format=3 uid="uid://vrqfmain0"]
+[gd_scene load_steps=16 format=3 uid="uid://vrqfmain0"]
 
 [ext_resource type="Script" path="res://scripts/Main.cs" id="1_main"]
 [ext_resource type="Script" path="res://scripts/FreeLookCamera.cs" id="2_cam"]
@@ -6,6 +6,7 @@
 [ext_resource type="Shader" path="res://shaders/quaternion_julia.gdshader" id="4_qjulia"]
 [ext_resource type="Script" path="res://scripts/FractalController.cs" id="5_fractalctrl"]
 [ext_resource type="Texture2D" path="res://textures/palette_fire.tres" id="6_palfire"]
+[ext_resource type="Script" path="res://scripts/FpsLabel.cs" id="7_fps"]
 
 [sub_resource type="ProceduralSkyMaterial" id="SkyMat_1"]
 sky_top_color = Color(0.16, 0.22, 0.35, 1)
@@ -108,3 +109,17 @@ tracker = &"right_hand"
 [node name="RightMesh" type="MeshInstance3D" parent="XROrigin3D/RightController"]
 mesh = SubResource("CtrlBox_1")
 surface_material_override/0 = SubResource("Mat_Ctrl")
+
+[node name="HUD" type="CanvasLayer" parent="."]
+
+[node name="FpsLabel" type="Label" parent="HUD"]
+offset_left = 14.0
+offset_top = 10.0
+offset_right = 260.0
+offset_bottom = 44.0
+theme_override_colors/font_color = Color(0.45, 1, 0.45, 1)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
+theme_override_constants/outline_size = 4
+theme_override_font_sizes/font_size = 24
+text = "-- FPS"
+script = ExtResource("7_fps")
