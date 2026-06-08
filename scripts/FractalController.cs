@@ -21,6 +21,7 @@ public partial class FractalController : MeshInstance3D
     {
         "Quaternion Julia", "Mandelbulb", "Quaternion Mandelbrot",
         "Menger Sponge", "Sierpinski Tetrahedron", "Burning Ship",
+        "Mandelbox", "Tricorn", "Nova",
     };
 
     public static readonly string[] MaterialNames =
@@ -56,6 +57,8 @@ public partial class FractalController : MeshInstance3D
     private float _shapePhase;
     private float _zoom;     // fractal_extent
     private float _quality;  // max_steps
+    private int _morphTarget = 1;
+    private float _morph;    // 0..1 blend toward _morphTarget
 
     public override void _Ready()
     {
@@ -79,6 +82,8 @@ public partial class FractalController : MeshInstance3D
         if (_zoom <= 0f) _zoom = 1f;
         _quality = ReadInt("max_steps");
         if (_quality < 16f) _quality = 96f;
+        _morphTarget = ReadInt("morph_target");
+        _morph = ReadFloat("morph");
 
         for (int i = 0; i < PalettePaths.Length; i++)
             _palettes[i] = GD.Load<Texture2D>(PalettePaths[i]);
@@ -101,6 +106,8 @@ public partial class FractalController : MeshInstance3D
     public string SpeedText => _morphSpeed.ToString("0.00");
     public string ZoomText => _zoom.ToString("0.00");
     public string QualityText => Mathf.RoundToInt(_quality).ToString();
+    public string MorphTargetName => FractalNames[_morphTarget];
+    public string MorphText => _morph.ToString("0.00");
 
     public override void _Process(double delta)
     {
@@ -184,6 +191,18 @@ public partial class FractalController : MeshInstance3D
     {
         _quality = Mathf.Clamp(_quality + delta, 16f, 256f);
         _material?.SetShaderParameter("max_steps", Mathf.RoundToInt(_quality));
+    }
+
+    public void CycleMorphTarget(int direction)
+    {
+        _morphTarget = Wrap(_morphTarget + direction, FractalNames.Length);
+        _material?.SetShaderParameter("morph_target", _morphTarget);
+    }
+
+    public void AdjustMorph(float delta)
+    {
+        _morph = Mathf.Clamp(_morph + delta, 0f, 1f);
+        _material?.SetShaderParameter("morph", _morph);
     }
 
     private void OnButtonPressed(string name, bool isLeft)

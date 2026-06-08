@@ -5,10 +5,10 @@
 // letting Godot's transform pipeline do the rest) is what keeps it in the
 // correct position from every viewpoint as the player moves or turns.
 //
-// fractal_type selects the formula:
-//   0 = Quaternion Julia (animated)   3 = Menger sponge
-//   1 = Mandelbulb (power 8)          4 = Sierpinski tetrahedron
-//   2 = Quaternion Mandelbrot         5 = Burning ship (3D)
+// fractal_type / morph_target select the formula (morph blends between them):
+//   0 = Quaternion Julia    3 = Menger sponge   6 = Mandelbox
+//   1 = Mandelbulb          4 = Sierpinski      7 = Tricorn (3D)
+//   2 = Quaternion Mandel   5 = Burning ship    8 = Nova (3D)
 //
 // material_mode selects the surface look:
 //   0 = Glow (emissive palette)       4 = Matcap chrome
@@ -24,6 +24,8 @@ shader_type spatial;
 render_mode cull_front, depth_draw_always;
 
 uniform int fractal_type = 0;
+uniform int morph_target = 1;        // fractal to morph toward
+uniform float morph = 0.0;           // 0 = fractal_type, 1 = morph_target (blends the DEs)
 uniform int material_mode = 0;
 uniform int max_steps = 96;
 uniform int iterations = 8;
@@ -161,36 +163,100 @@ float sierpinski_de(vec3 z, float scale, out float trap) {
 	return length(z) * pow(scale, -float(iterations));
 }
 
+float mandelbox_de(vec3 pos, float box_scale, out float trap) {
+	vec4 z = vec4(pos, 1.0);
+	float orbit = 1e9;
+	for (int i = 0; i < iterations; i++) {
+		if (length(z.xyz) > 6.0) break;
+		z.xyz = clamp(z.xyz, -1.0, 1.0) * 2.0 - z.xyz;   // box fold
+		float r2 = dot(z.xyz, z.xyz);
+		if (r2 < 0.25) z *= 4.0;                          // sphere fold (1.0 / 0.25)
+		else if (r2 < 1.0) z *= 1.0 / r2;
+		z = z * box_scale + vec4(pos, 0.0);
+		orbit = min(orbit, r2);
+	}
+	trap = clamp(sqrt(orbit) * 0.5, 0.0, 1.0);
+	return length(z.xyz) / abs(z.w);
+}
+
+float tricorn_de(vec3 pos, float power, out float trap) {
+	vec3 z = pos;
+	float dr = 1.0;
+	float r = 0.0;
+	float orbit = 1e9;
+	for (int i = 0; i < iterations; i++) {
+		r = length(z);
+		if (r > 2.0) break;
+		z.y = -z.y; z.z = -z.z;                           // conjugate fold (tricorn)
+		float theta = acos(clamp(z.z / r, -1.0, 1.0));
+		float phi = atan(z.y, z.x);
+		dr = pow(r, power - 1.0) * power * dr + 1.0;
+		float zr = pow(r, power);
+		theta *= power; phi *= power;
+		z = zr * vec3(sin(theta) * cos(phi), sin(theta) * sin(phi), cos(theta)) + pos;
+		orbit = min(orbit, r);
+	}
+	trap = clamp(orbit * 0.5, 0.0, 1.0);
+	return 0.5 * log(max(r, 1.0001)) * r / dr;
+}
+
+float nova_de(vec3 pos, vec3 c_off, out float trap) {
+	vec3 z = pos;
+	vec3 dz = vec3(1.0, 0.0, 0.0);
+	float orbit = 1e9;
+	for (int i = 0; i < iterations; i++) {
+		if (dot(z, z) > 16.0) break;
+		vec3 z2 = z * z;
+		vec3 z3 = z2 * z;
+		dz = 3.0 * z2 * dz;
+		z = z - (z3 - vec3(1.0)) / (3.0 * z2 + vec3(1e-4)) + c_off; // Newton step + constant
+		orbit = min(orbit, dot(z, z));
+	}
+	trap = clamp(sqrt(orbit) * 0.6, 0.0, 1.0);
+	return 0.4 * length(z) / max(length(dz), 1e-6);
+}
+
 // Bounding radius of each fractal in its own fractal space. The sphere is
 // scaled to this so each fractal fits snugly inside instead of being clipped
 // (the cubic Menger/Sierpinski reach their corners at radius ~sqrt(3)).
-float fractal_radius() {
-	if (fractal_type == 1) return 1.3;  // Mandelbulb
-	if (fractal_type == 2) return 1.6;  // Quaternion Mandelbrot
-	if (fractal_type == 3) return 1.85; // Menger sponge (cube corners)
-	if (fractal_type == 4) return 1.85; // Sierpinski tetrahedron
-	if (fractal_type == 5) return 1.4;  // Burning ship
-	return 1.5;                         // Quaternion Julia
+float fractal_radius(int type) {
+	if (type == 1) return 1.3;   // Mandelbulb
+	if (type == 2) return 1.6;   // Quaternion Mandelbrot
+	if (type == 3) return 1.85;  // Menger sponge (cube corners)
+	if (type == 4) return 1.85;  // Sierpinski tetrahedron
+	if (type == 5) return 1.4;   // Burning ship
+	if (type == 6) return 4.5;   // Mandelbox (lives in a larger domain)
+	if (type == 7) return 1.4;   // Tricorn
+	if (type == 8) return 1.6;   // Nova
+	return 1.5;                  // Quaternion Julia
 }
 
-// Every fractal reads the same two controls: `shape` (scrubbed) sets its
-// defining parameter, and `anim` (= TIME * morph_speed) oscillates it so the
-// fractal animates. Pass anim in because TIME isn't visible in sub-functions.
-float map(vec3 p, float anim, out float trap) {
-	if (fractal_type == 1) // Mandelbulb: shape/anim drive the power
-		return mandelbulb_de(p, clamp(8.0 + 4.0 * sin(shape) + sin(anim), 2.0, 12.0), trap);
-	if (fractal_type == 2) // Quaternion Mandelbrot: offset c (Julia-like morph)
-		return qmandel_de(p, 0.18 * vec4(sin(shape), cos(shape * 0.9), sin(anim), cos(anim * 0.8)), trap);
-	if (fractal_type == 3) // Menger sponge: fold ratio
-		return menger_de(p, 3.0 + 0.6 * sin(shape) + 0.15 * sin(anim), trap);
-	if (fractal_type == 4) // Sierpinski tetrahedron: fold scale
-		return sierpinski_de(p, 2.0 + 0.28 * sin(shape) + 0.05 * sin(anim), trap);
-	if (fractal_type == 5) // Burning ship: power
-		return burningship_de(p, clamp(8.0 + 4.0 * sin(shape) + sin(anim), 2.0, 12.0), trap);
-	// Quaternion Julia: shape sweeps the c constant, anim wobbles it.
+// Distance estimator for one fractal. `shape` (scrubbed) sets its defining
+// parameter and `anim` (= TIME * morph_speed) oscillates it so it animates.
+float de(int type, vec3 p, float anim, out float trap) {
+	if (type == 1) return mandelbulb_de(p, clamp(8.0 + 4.0 * sin(shape) + sin(anim), 2.0, 12.0), trap);
+	if (type == 2) return qmandel_de(p, 0.18 * vec4(sin(shape), cos(shape * 0.9), sin(anim), cos(anim * 0.8)), trap);
+	if (type == 3) return menger_de(p, 3.0 + 0.6 * sin(shape) + 0.15 * sin(anim), trap);
+	if (type == 4) return sierpinski_de(p, 2.0 + 0.28 * sin(shape) + 0.05 * sin(anim), trap);
+	if (type == 5) return burningship_de(p, clamp(8.0 + 4.0 * sin(shape) + sin(anim), 2.0, 12.0), trap);
+	if (type == 6) return mandelbox_de(p, 2.0 + 0.5 * sin(shape) + 0.1 * sin(anim), trap);
+	if (type == 7) return tricorn_de(p, clamp(8.0 + 4.0 * sin(shape) + sin(anim), 2.0, 12.0), trap);
+	if (type == 8) return nova_de(p, 0.3 * vec3(cos(shape), sin(shape * 0.9), cos(shape * 1.3)) + 0.1 * vec3(sin(anim)), trap);
+	// 0 = Quaternion Julia: shape sweeps the c constant, anim wobbles it.
 	vec4 c = 0.5 * vec4(cos(shape), sin(shape * 0.9), cos(shape * 1.3), sin(shape * 0.5))
 		+ 0.12 * vec4(sin(anim), cos(anim * 0.8), sin(anim * 1.2), cos(anim * 0.6));
 	return qjulia_de(p, c, trap);
+}
+
+// Blend the active fractal toward morph_target by `morph` (a soft DE mix —
+// not a true SDF union, but it morphs the surface convincingly).
+float map(vec3 p, float anim, out float trap) {
+	float dA = de(fractal_type, p, anim, trap);
+	if (morph <= 0.001) return dA; // common case: one evaluation
+	float tB;
+	float dB = de(morph_target, p, anim, tB);
+	trap = mix(trap, tB, morph);
+	return mix(dA, dB, morph);
 }
 
 vec3 calc_normal(vec3 p, float anim) {
@@ -249,8 +315,9 @@ void fragment() {
 	}
 	t_near = max(t_near, 0.0); // start at the camera if it is inside the volume
 
-	// Object -> fractal domain scale (per-fractal fit, with optional global zoom).
-	float scale = fractal_radius() * fractal_extent / mesh_half;
+	// Object -> fractal domain scale (per-fractal fit; radius blends while morphing).
+	float radius = mix(fractal_radius(fractal_type), fractal_radius(morph_target), morph);
+	float scale = radius * fractal_extent / mesh_half;
 
 	// Animation phase shared by every fractal (morph_speed scales it; 0 = frozen).
 	float anim = TIME * morph_speed;

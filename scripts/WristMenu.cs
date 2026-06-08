@@ -23,6 +23,7 @@ public partial class WristMenu : Node3D
     private bool _touching;
 
     private Label? _fracVal, _matVal, _palVal, _detailVal, _shapeVal, _speedVal, _zoomVal, _qualVal;
+    private Label? _morphTgtVal, _morphVal;
     private Button? _arBtn;
 
     public override void _Ready()
@@ -73,6 +74,10 @@ public partial class WristMenu : Node3D
         _speedVal = StepRow(col, "Speed", d => _fc?.AdjustSpeed(d), 0.05f);
         _zoomVal = StepRow(col, "Zoom", d => _fc?.AdjustZoom(d), 0.1f);
         _qualVal = StepRow(col, "Quality", d => _fc?.AdjustQuality(d), 8f);
+
+        col.AddChild(Header("MORPH"));
+        _morphTgtVal = SelectorRow(col, "Target", d => _fc?.CycleMorphTarget(d));
+        _morphVal = StepRow(col, "Morph", d => _fc?.AdjustMorph(d), 0.1f);
 
         _arBtn = new Button { Text = "AR / VR", CustomMinimumSize = new Vector2(0, 60) };
         _arBtn.AddThemeFontSizeOverride("font_size", 24);
@@ -169,6 +174,8 @@ public partial class WristMenu : Node3D
         if (_speedVal is not null) _speedVal.Text = _fc.SpeedText;
         if (_zoomVal is not null) _zoomVal.Text = _fc.ZoomText;
         if (_qualVal is not null) _qualVal.Text = _fc.QualityText;
+        if (_morphTgtVal is not null) _morphTgtVal.Text = _fc.MorphTargetName;
+        if (_morphVal is not null) _morphVal.Text = _fc.MorphText;
         if (_arBtn is not null && _main is not null)
             _arBtn.Text = _main.ArAvailable ? (_main.IsAr ? "Switch to VR" : "Switch to AR") : "AR unavailable";
     }
