@@ -77,10 +77,7 @@ public partial class Main : Node3D
             floor.Visible = !on; // the real floor replaces the virtual one in AR
 
         if (GetNodeOrNull<WorldEnvironment>("WorldEnvironment")?.Environment is Environment env)
-        {
-            env.BackgroundMode = on ? Environment.BGMode.Color : Environment.BGMode.Sky;
-            env.BackgroundColor = new Color(0, 0, 0, 0); // transparent clear for passthrough
-        }
+            env.BackgroundMode = on ? Environment.BGMode.ClearColor : Environment.BGMode.Sky;
 
         GD.Print(on ? "vrqf AR — passthrough ON" : "vrqf AR — passthrough OFF (VR)");
     }

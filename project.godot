@@ -67,5 +67,6 @@ renderer/rendering_method="forward_plus"
 openxr/enabled=true
 openxr/startup_alert=false
 openxr/reference_space=2
-openxr/environment_blend_mode=0
+openxr/environment_blend_mode=2
+openxr/extensions/meta/passthrough=true
 shaders/enabled=true
