@@ -205,6 +205,34 @@ public partial class FractalController : MeshInstance3D
         _material?.SetShaderParameter("morph", _morph);
     }
 
+    public void Randomize()
+    {
+        _fractal = (int)(GD.Randi() % (uint)FractalNames.Length);
+        _materialMode = (int)(GD.Randi() % (uint)MaterialNames.Length);
+        _palette = (int)(GD.Randi() % (uint)_palettes.Length);
+        _morphTarget = (int)(GD.Randi() % (uint)FractalNames.Length);
+        _shapePhase = (float)GD.RandRange(-3.0, 3.0);
+        _morph = (float)GD.RandRange(0.0, 0.6);
+        _morphSpeed = (float)GD.RandRange(0.0, 0.6);
+        _iterations = Mathf.RoundToInt((float)GD.RandRange(6.0, 16.0));
+        _zoom = (float)GD.RandRange(0.85, 1.25);
+        ApplyAll();
+    }
+
+    private void ApplyAll()
+    {
+        if (_material is null) return;
+        _material.SetShaderParameter("fractal_type", _fractal);
+        _material.SetShaderParameter("material_mode", _materialMode);
+        _material.SetShaderParameter("palette_tex", _palettes[_palette]);
+        _material.SetShaderParameter("morph_target", _morphTarget);
+        _material.SetShaderParameter("morph", _morph);
+        _material.SetShaderParameter("shape", _shapePhase);
+        _material.SetShaderParameter("morph_speed", _morphSpeed);
+        _material.SetShaderParameter("iterations", Mathf.RoundToInt(_iterations));
+        _material.SetShaderParameter("fractal_extent", _zoom);
+    }
+
     private void OnButtonPressed(string name, bool isLeft)
     {
         switch (name)
@@ -233,6 +261,7 @@ public partial class FractalController : MeshInstance3D
             case Key.M: CycleMorphTarget(1); break;
             case Key.Period: AdjustMorph(0.1f); break;
             case Key.Comma: AdjustMorph(-0.1f); break;
+            case Key.R: Randomize(); break;
         }
     }
 

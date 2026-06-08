@@ -17,6 +17,7 @@ public partial class HelpOverlay : CanvasLayer
         "Wrist menu     poke the panel on your left wrist\n" +
         "Morph target   wrist menu                 (M)\n" +
         "Morph amount   wrist menu                 (, / .)\n" +
+        "Randomize      wrist-menu button          (R)\n" +
         "AR / VR        wrist-menu button          (V)\n" +
         "Help           menu button                (?)";
 

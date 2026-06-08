@@ -79,6 +79,11 @@ public partial class WristMenu : Node3D
         _morphTgtVal = SelectorRow(col, "Target", d => _fc?.CycleMorphTarget(d));
         _morphVal = StepRow(col, "Morph", d => _fc?.AdjustMorph(d), 0.1f);
 
+        var rnd = new Button { Text = "Randomize", CustomMinimumSize = new Vector2(0, 60) };
+        rnd.AddThemeFontSizeOverride("font_size", 24);
+        rnd.Pressed += () => _fc?.Randomize();
+        col.AddChild(rnd);
+
         _arBtn = new Button { Text = "AR / VR", CustomMinimumSize = new Vector2(0, 60) };
         _arBtn.AddThemeFontSizeOverride("font_size", 24);
         _arBtn.Pressed += () => _main?.ToggleAr();
