@@ -16,8 +16,10 @@
 //   2 = Metal  (reflective)           6 = Matcap pearl
 //   3 = Glass  (fresnel/reflective)
 //
-// The lit pipeline (not unshaded) is what lets Godot's ReflectionProbe and
-// screen-space reflections bounce the real scene off the metal/glass surface.
+// The lit pipeline (not unshaded) is what lets Godot's ReflectionProbe bounce
+// the real scene off the metal/glass surface. (SSR is unreliable here because
+// this shader writes DEPTH and skips the prepass SSR relies on — the probe,
+// which must exclude this mesh via render layers, is the real mechanism.)
 shader_type spatial;
 render_mode cull_front, depth_draw_always;
 
