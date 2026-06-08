@@ -230,6 +230,9 @@ public partial class FractalController : MeshInstance3D
             case Key.P: CyclePalette(1); break;
             case Key.Bracketright: CycleLiveParam(1); break;
             case Key.Bracketleft: CycleLiveParam(-1); break;
+            case Key.M: CycleMorphTarget(1); break;
+            case Key.Period: AdjustMorph(0.1f); break;
+            case Key.Comma: AdjustMorph(-0.1f); break;
         }
     }
 

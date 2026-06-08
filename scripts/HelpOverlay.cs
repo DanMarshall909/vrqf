@@ -15,7 +15,8 @@ public partial class HelpOverlay : CanvasLayer
         "Live param     grip  R next · L prev      (] / [)\n" +
         "Scrub param    triggers  R up · L down    (= / -)\n" +
         "Wrist menu     poke the panel on your left wrist\n" +
-        "Morph          wrist menu (Target + Morph)\n" +
+        "Morph target   wrist menu                 (M)\n" +
+        "Morph amount   wrist menu                 (, / .)\n" +
         "AR / VR        wrist-menu button          (V)\n" +
         "Help           menu button                (?)";
 
