@@ -33,8 +33,8 @@ uniform float morph_speed = 0.25;
 uniform float morph_amount = 0.18;
 uniform sampler2D palette_tex : source_color, hint_default_white;
 uniform vec3 glow_color : source_color = vec3(0.6, 0.85, 1.0);
-uniform float mesh_half = 0.15;      // BoxMesh half-extent (size 0.3 -> 0.15)
-uniform float fractal_extent = 1.3;  // fractal half-size the box maps to
+uniform float mesh_half = 0.15;      // proxy sphere radius (object space)
+uniform float fractal_extent = 1.0;  // global size multiplier (1 = auto-fit per fractal)
 uniform float boundary_eps = 0.003;  // trim hits on the box shell (kills edge lines)
 
 varying vec3 v_frag_local;  // this fragment's position in object space
@@ -163,6 +163,18 @@ float sierpinski_de(vec3 z, out float trap) {
 	return length(z) * pow(scale, -float(iterations));
 }
 
+// Bounding radius of each fractal in its own fractal space. The sphere is
+// scaled to this so each fractal fits snugly inside instead of being clipped
+// (the cubic Menger/Sierpinski reach their corners at radius ~sqrt(3)).
+float fractal_radius() {
+	if (fractal_type == 1) return 1.3;  // Mandelbulb
+	if (fractal_type == 2) return 1.6;  // Quaternion Mandelbrot
+	if (fractal_type == 3) return 1.85; // Menger sponge (cube corners)
+	if (fractal_type == 4) return 1.85; // Sierpinski tetrahedron
+	if (fractal_type == 5) return 1.4;  // Burning ship
+	return 1.5;                         // Quaternion Julia
+}
+
 float map(vec3 p, vec4 c, out float trap) {
 	if (fractal_type == 1) return mandelbulb_de(p, 8.0, trap);
 	if (fractal_type == 2) return qmandel_de(p, trap);
@@ -228,8 +240,8 @@ void fragment() {
 	}
 	t_near = max(t_near, 0.0); // start at the camera if it is inside the volume
 
-	// Object -> fractal domain scale.
-	float scale = fractal_extent / mesh_half;
+	// Object -> fractal domain scale (per-fractal fit, with optional global zoom).
+	float scale = fractal_radius() * fractal_extent / mesh_half;
 
 	// Animate the Julia constant (only used by the quaternion Julia set).
 	vec4 c = julia_c + morph_amount * vec4(
