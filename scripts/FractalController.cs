@@ -12,7 +12,8 @@ namespace Vrqf;
 //                          left trigger = down
 //
 // The analog triggers continuously dial the currently-selected parameter:
-// Detail (iterations), Shape (quaternion-c drift), or Speed (morph rate).
+// Detail (iterations), Shape (per-fractal shape param), or Speed (morph rate).
+// All three affect every fractal.
 public partial class FractalController : MeshInstance3D
 {
     [Export] public NodePath LeftControllerPath { get; set; } = "../XROrigin3D/LeftController";
@@ -120,9 +121,9 @@ public partial class FractalController : MeshInstance3D
                 _iterations = Mathf.Clamp(_iterations + step * 6f, 2f, 20f);
                 _material!.SetShaderParameter("iterations", Mathf.RoundToInt(_iterations));
                 break;
-            case 1: // Shape — sweep the quaternion Julia 'c' through varied forms
+            case 1: // Shape — per-fractal defining parameter (power / fold / c sweep)
                 _shapePhase += step * 1.5f;
-                _material!.SetShaderParameter("julia_c", ShapeFromPhase(_shapePhase));
+                _material!.SetShaderParameter("shape", _shapePhase);
                 break;
             default: // Speed / morph rate
                 _morphSpeed = Mathf.Clamp(_morphSpeed + step * 1.2f, 0f, 2f);
@@ -130,12 +131,6 @@ public partial class FractalController : MeshInstance3D
                 break;
         }
     }
-
-    private static Vector4 ShapeFromPhase(float p) => new(
-        0.45f * Mathf.Cos(p),
-        0.45f * Mathf.Sin(p * 0.9f),
-        0.45f * Mathf.Cos(p * 1.3f),
-        0.45f * Mathf.Sin(p * 0.5f));
 
     private void OnButtonPressed(string name, bool isLeft)
     {
