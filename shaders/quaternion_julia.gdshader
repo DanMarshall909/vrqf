@@ -50,6 +50,11 @@ vec4 qmul(vec4 a, vec4 b) {
 	);
 }
 
+vec2 rot2(vec2 v, float a) {
+	float c = cos(a), s = sin(a);
+	return vec2(c * v.x - s * v.y, s * v.x + c * v.y);
+}
+
 // ----- Distance estimators. Each returns DE and a 0..1 colour factor (trap).
 
 float qjulia_de(vec3 pos, vec4 c, out float trap) {
@@ -216,6 +221,90 @@ float nova_de(vec3 pos, vec3 c_off, out float trap) {
 	return 0.4 * length(z) / max(length(dz), 1e-6);
 }
 
+// Apollonian gasket via repeated cell-folding + inversion (after iq).
+float apollonian_de(vec3 p, float k, out float trap) {
+	float scale = 1.0;
+	vec3 z = p;
+	float orbit = 1e9;
+	for (int i = 0; i < iterations; i++) {
+		z = -1.0 + 2.0 * fract(0.5 * z + 0.5);
+		float r2 = dot(z, z);
+		orbit = min(orbit, r2);
+		float kk = k / max(r2, 1e-4);
+		z *= kk;
+		scale *= kk;
+	}
+	trap = clamp(sqrt(orbit), 0.0, 1.0);
+	return 0.25 * abs(z.y) / scale;
+}
+
+// Kaleidoscopic IFS: a Sierpinski fold with rotations between iterations.
+float kifs_de(vec3 z, float ang, out float trap) {
+	float scale = 2.0;
+	float orbit = 1e9;
+	for (int i = 0; i < iterations; i++) {
+		z.xy = rot2(z.xy, ang);
+		z = abs(z);
+		if (z.x < z.y) z.xy = z.yx;
+		if (z.x < z.z) z.xz = z.zx;
+		if (z.y < z.z) z.yz = z.zy;
+		z.yz = rot2(z.yz, ang * 0.7);
+		z = z * scale - vec3(1.0) * (scale - 1.0);
+		orbit = min(orbit, dot(z, z));
+	}
+	trap = clamp(sqrt(orbit) * 0.3, 0.0, 1.0);
+	return length(z) * pow(scale, -float(iterations));
+}
+
+// Octahedral IFS (abs + sort fold).
+float octahedral_de(vec3 z, float s, out float trap) {
+	float orbit = 1e9;
+	for (int i = 0; i < iterations; i++) {
+		z = abs(z);
+		if (z.x < z.y) z.xy = z.yx;
+		if (z.x < z.z) z.xz = z.zx;
+		if (z.y < z.z) z.yz = z.zy;
+		z = z * s - vec3(1.0) * (s - 1.0);
+		orbit = min(orbit, dot(z, z));
+	}
+	trap = clamp(sqrt(orbit) * 0.3, 0.0, 1.0);
+	return length(z) * pow(s, -float(iterations));
+}
+
+// Gyroid triply-periodic minimal surface (thickened isosurface).
+float gyroid_de(vec3 p, float s, out float trap) {
+	vec3 q = p * s;
+	float f = dot(sin(q), cos(q.yzx));
+	trap = clamp(abs(f), 0.0, 1.0);
+	return (abs(f) - 0.2) * 0.3 / s;
+}
+
+// Schwarz-P triply-periodic minimal surface (thickened isosurface).
+float schwarz_de(vec3 p, float s, out float trap) {
+	vec3 q = p * s;
+	float f = cos(q.x) + cos(q.y) + cos(q.z);
+	trap = clamp(abs(f) * 0.3, 0.0, 1.0);
+	return (abs(f) - 0.2) * 0.3 / s;
+}
+
+// Cubic quaternion Julia: z = z^3 + c.
+float qjulia3_de(vec3 pos, vec4 c, out float trap) {
+	vec4 z = vec4(pos, 0.0);
+	float dz2 = 1.0;
+	float m2 = dot(z, z);
+	float orbit = 1e9;
+	for (int i = 0; i < iterations; i++) {
+		dz2 *= 9.0 * m2 * m2;          // |3 z^2|^2 = 9 |z|^4
+		z = qmul(qmul(z, z), z) + c;   // z^3 + c
+		m2 = dot(z, z);
+		orbit = min(orbit, m2);
+		if (m2 > 256.0) break;
+	}
+	float r = sqrt(m2);
+	trap = clamp(sqrt(orbit) * 0.7, 0.0, 1.0);
+	return 0.16 * r * log(max(r, 1.0001)) / sqrt(max(dz2, 1e-12));
+}
+
 // Bounding radius of each fractal in its own fractal space. The sphere is
 // scaled to this so each fractal fits snugly inside instead of being clipped
 // (the cubic Menger/Sierpinski reach their corners at radius ~sqrt(3)).
@@ -228,6 +317,13 @@ float fractal_radius(int type) {
 	if (type == 6) return 4.5;   // Mandelbox (lives in a larger domain)
 	if (type == 7) return 1.4;   // Tricorn
 	if (type == 8) return 1.6;   // Nova
+	if (type == 9) return 1.1;   // Apollonian
+	if (type == 10) return 1.8;  // Kaleidoscopic IFS
+	if (type == 11) return 1.8;  // Octahedral IFS
+	if (type == 12) return 1.4;  // Gyroid
+	if (type == 13) return 1.4;  // Schwarz-P
+	if (type == 14) return 1.35; // Mandelbulb P3
+	if (type == 15) return 1.4;  // Cubic Julia
 	return 1.5;                  // Quaternion Julia
 }
 
@@ -242,6 +338,17 @@ float de(int type, vec3 p, float anim, out float trap) {
 	if (type == 6) return mandelbox_de(p, 2.0 + 0.5 * sin(shape) + 0.1 * sin(anim), trap);
 	if (type == 7) return tricorn_de(p, clamp(8.0 + 4.0 * sin(shape) + sin(anim), 2.0, 12.0), trap);
 	if (type == 8) return nova_de(p, 0.3 * vec3(cos(shape), sin(shape * 0.9), cos(shape * 1.3)) + 0.1 * vec3(sin(anim)), trap);
+	if (type == 9) return apollonian_de(p, 1.0 + 0.25 * sin(shape), trap);
+	if (type == 10) return kifs_de(p, 0.4 + 0.3 * sin(shape) + 0.1 * sin(anim), trap);
+	if (type == 11) return octahedral_de(p, 2.0 + 0.3 * sin(shape), trap);
+	if (type == 12) return gyroid_de(p, 3.0 + 1.0 * sin(shape) + 0.3 * sin(anim), trap);
+	if (type == 13) return schwarz_de(p, 3.0 + 1.0 * sin(shape), trap);
+	if (type == 14) return mandelbulb_de(p, clamp(3.0 + 1.5 * sin(shape) + 0.5 * sin(anim), 2.0, 6.0), trap);
+	if (type == 15) {
+		vec4 c3 = 0.4 * vec4(cos(shape), sin(shape * 0.9), cos(shape * 1.3), sin(shape * 0.5))
+			+ 0.1 * vec4(sin(anim), cos(anim), sin(anim * 1.3), cos(anim * 0.7));
+		return qjulia3_de(p, c3, trap);
+	}
 	// 0 = Quaternion Julia: shape sweeps the c constant, anim wobbles it.
 	vec4 c = 0.5 * vec4(cos(shape), sin(shape * 0.9), cos(shape * 1.3), sin(shape * 0.5))
 		+ 0.12 * vec4(sin(anim), cos(anim * 0.8), sin(anim * 1.2), cos(anim * 0.6));

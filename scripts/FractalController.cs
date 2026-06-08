@@ -22,6 +22,8 @@ public partial class FractalController : MeshInstance3D
         "Quaternion Julia", "Mandelbulb", "Quaternion Mandelbrot",
         "Menger Sponge", "Sierpinski Tetrahedron", "Burning Ship",
         "Mandelbox", "Tricorn", "Nova",
+        "Apollonian", "Kaleidoscopic IFS", "Octahedral IFS",
+        "Gyroid", "Schwarz P", "Mandelbulb P3", "Cubic Julia",
     };
 
     public static readonly string[] MaterialNames =
