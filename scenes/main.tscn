@@ -1,4 +1,4 @@
-[gd_scene load_steps=17 format=3 uid="uid://vrqfmain0"]
+[gd_scene load_steps=18 format=3 uid="uid://vrqfmain0"]
 
 [ext_resource type="Script" path="res://scripts/Main.cs" id="1_main"]
 [ext_resource type="Script" path="res://scripts/FreeLookCamera.cs" id="2_cam"]
@@ -8,6 +8,7 @@
 [ext_resource type="Texture2D" path="res://textures/palette_fire.tres" id="6_palfire"]
 [ext_resource type="Script" path="res://scripts/FpsLabel.cs" id="7_fps"]
 [ext_resource type="Script" path="res://scripts/WristMenu.cs" id="8_wrist"]
+[ext_resource type="Script" path="res://scripts/HelpOverlay.cs" id="9_help"]
 
 [sub_resource type="ProceduralSkyMaterial" id="SkyMat_1"]
 sky_top_color = Color(0.16, 0.22, 0.35, 1)
@@ -118,6 +119,9 @@ mesh = SubResource("CtrlBox_1")
 surface_material_override/0 = SubResource("Mat_Ctrl")
 
 [node name="HUD" type="CanvasLayer" parent="."]
+
+[node name="Help" type="CanvasLayer" parent="."]
+script = ExtResource("9_help")
 
 [node name="FpsLabel" type="Label" parent="HUD"]
 offset_left = 14.0

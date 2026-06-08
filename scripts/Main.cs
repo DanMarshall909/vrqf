@@ -48,8 +48,10 @@ public partial class Main : Node3D
     private void ConnectToggle(string path)
     {
         if (GetNodeOrNull<XRController3D>(path) is XRController3D c)
-            c.ButtonPressed += name => { if (name == "menu_button") ToggleAr(); };
+            c.ButtonPressed += name => { if (name == "menu_button") ToggleHelp(); };
     }
+
+    private void ToggleHelp() => GetNodeOrNull<HelpOverlay>("Help")?.Toggle();
 
     public bool ArAvailable => _passthroughSupported;
     public bool IsAr => _ar;
@@ -82,7 +84,8 @@ public partial class Main : Node3D
 
     public override void _UnhandledInput(InputEvent @event)
     {
-        if (@event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.V })
-            ToggleAr();
+        if (@event is not InputEventKey { Pressed: true, Echo: false } key) return;
+        if (key.Keycode == Key.V) ToggleAr();
+        else if (key.Unicode == '?' || key.Keycode == Key.Help) ToggleHelp();
     }
 }
