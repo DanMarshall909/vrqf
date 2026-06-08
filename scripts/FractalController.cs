@@ -127,7 +127,9 @@ public partial class FractalController : MeshInstance3D
 
     private float TriggerInput()
     {
-        float up = _right?.GetFloat("trigger") ?? 0f;
+        // While aiming the laser at the wrist menu, the right trigger is a
+        // click, not a scrub.
+        float up = WristMenu.PointerOverPanel ? 0f : (_right?.GetFloat("trigger") ?? 0f);
         float down = _left?.GetFloat("trigger") ?? 0f;
         float net = up - down;
         return Mathf.Abs(net) < TriggerDeadzone ? 0f : net;
