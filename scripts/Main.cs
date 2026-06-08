@@ -24,7 +24,15 @@ public partial class Main : Node3D
             DisplayServer.WindowSetVsyncMode(DisplayServer.VSyncMode.Disabled);
             GD.Print("vrqf M1 — OpenXR ready");
 
-            _passthroughSupported = ProbePassthrough();
+            // The project sets environment_blend_mode=2 (alpha blend); with the
+            // godot_openxr_vendors plugin emulating passthrough, the interface
+            // comes up in AlphaBlend if passthrough was created successfully.
+            // Just check it (don't toggle the mode — that can disrupt the
+            // plugin's passthrough setup). Mirrors the official sample.
+            _passthroughSupported =
+                _xr.EnvironmentBlendMode == XRInterface.EnvironmentBlendModeEnum.AlphaBlend;
+            GD.Print($"vrqf AR — blend mode at startup: {_xr.EnvironmentBlendMode} (passthrough {(_passthroughSupported ? "available" : "unavailable — staying VR")})");
+
             ConnectToggle("XROrigin3D/LeftController");
             ConnectToggle("XROrigin3D/RightController");
             SetAr(StartInAr && _passthroughSupported);
@@ -35,19 +43,6 @@ public partial class Main : Node3D
             GetNode<Camera3D>(FlatCameraPath).Current = true;
             GD.Print("vrqf M1 — OpenXR unavailable, flat debug mode");
         }
-    }
-
-    // Returns true if the runtime accepts alpha-blend (passthrough) compositing.
-    private bool ProbePassthrough()
-    {
-        GD.Print("vrqf AR — supported blend modes: ", _xr!.GetSupportedEnvironmentBlendModes());
-        var alpha = XRInterface.EnvironmentBlendModeEnum.AlphaBlend;
-        _xr.EnvironmentBlendMode = alpha;
-        bool ok = _xr.EnvironmentBlendMode == alpha;
-        _xr.EnvironmentBlendMode = XRInterface.EnvironmentBlendModeEnum.Opaque;
-        if (!ok)
-            GD.Print("vrqf AR — runtime offers no alpha-blend passthrough (enable passthrough in Virtual Desktop / use Meta runtime). Staying VR.");
-        return ok;
     }
 
     private void ConnectToggle(string path)
