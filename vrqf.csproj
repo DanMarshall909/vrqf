@@ -1,0 +1,9 @@
+<Project Sdk="Godot.NET.Sdk/4.7.0-beta.5">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>Vrqf</RootNamespace>
+  </PropertyGroup>
+</Project>
