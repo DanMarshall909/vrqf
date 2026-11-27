@@ -9,7 +9,7 @@
 [ext_resource type="Script" path="res://scripts/FpsLabel.cs" id="7_fps"]
 [ext_resource type="Script" path="res://scripts/WristMenu.cs" id="8_wrist"]
 [ext_resource type="Script" path="res://scripts/HelpOverlay.cs" id="9_help"]
-[ext_resource type="Script" path="res://scripts/Gallery.cs" id="10_gallery"]
+[ext_resource type="Script" path="res://scripts/ExplorerPanel.cs" id="10_explorer"]
 
 [sub_resource type="ProceduralSkyMaterial" id="SkyMat_1"]
 sky_top_color = Color(0.16, 0.22, 0.35, 1)
@@ -35,8 +35,8 @@ ssr_max_steps = 32
 size = Vector3(0.3, 0.3, 0.3)
 
 [sub_resource type="SphereMesh" id="Sphere_1"]
-radius = 0.15
-height = 0.3
+radius = 0.45
+height = 0.9
 
 [sub_resource type="ShaderMaterial" id="Mat_Fractal"]
 render_priority = 0
@@ -45,6 +45,9 @@ shader_parameter/fractal_type = 0
 shader_parameter/morph_target = 1
 shader_parameter/morph = 0.0
 shader_parameter/material_mode = 0
+shader_parameter/material_roughness = 1.0
+shader_parameter/material_metallic = 0.0
+shader_parameter/material_emission = 1.0
 shader_parameter/max_steps = 96
 shader_parameter/iterations = 8
 shader_parameter/epsilon = 0.0012
@@ -52,7 +55,7 @@ shader_parameter/morph_speed = 0.25
 shader_parameter/shape = 0.0
 shader_parameter/palette_tex = ExtResource("6_palfire")
 shader_parameter/glow_color = Color(0.6, 0.85, 1, 1)
-shader_parameter/mesh_half = 0.15
+shader_parameter/mesh_half = 0.45
 shader_parameter/fractal_extent = 1.0
 
 [node name="Main" type="Node3D"]
@@ -70,8 +73,8 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.6, 1.2)
 current = true
 script = ExtResource("2_cam")
 
-[node name="Cube" type="MeshInstance3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.3, 0)
+[node name="Fractal" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.6, 0)
 layers = 2
 mesh = SubResource("Sphere_1")
 surface_material_override/0 = SubResource("Mat_Fractal")
@@ -82,7 +85,7 @@ transform = Transform3D(8, 0, 0, 0, 1, 0, 0, 0, 8, 0, 0, 0)
 mesh = SubResource("Box_1")
 
 [node name="ReflectionProbe" type="ReflectionProbe" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.3, 0)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.6, 0)
 cull_mask = 1048573
 update_mode = 1
 size = Vector3(8, 4, 8)
@@ -112,11 +115,17 @@ render_model_type = 1
 
 [node name="HUD" type="CanvasLayer" parent="."]
 
+[node name="ExplorerPanel" type="PanelContainer" parent="HUD"]
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -330.0
+offset_top = 12.0
+offset_right = -12.0
+offset_bottom = 540.0
+script = ExtResource("10_explorer")
+
 [node name="Help" type="CanvasLayer" parent="."]
 script = ExtResource("9_help")
-
-[node name="Gallery" type="Node3D" parent="."]
-script = ExtResource("10_gallery")
 
 [node name="FpsLabel" type="Label" parent="HUD"]
 offset_left = 14.0

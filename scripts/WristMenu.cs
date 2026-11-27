@@ -3,9 +3,9 @@ using Godot;
 namespace Vrqf;
 
 // A settings panel anchored above the left controller, rendered via a
-// SubViewport onto a quad. You "poke" the buttons with the right controller:
-// when its position enters a button's area on the panel, a click is injected
-// into the SubViewport. All edits go through the FractalController (and Main
+// SubViewport onto a quad. The right controller aims a ray at the panel;
+// pulling the trigger injects a click into the SubViewport. All edits go
+// through the FractalController (and Main
 // for the AR toggle), so the menu, triggers, and shader stay in sync.
 public partial class WristMenu : Node3D
 {
@@ -29,8 +29,9 @@ public partial class WristMenu : Node3D
     private float _prevTrigger;
 
     private Label? _fracVal, _matVal, _palVal, _detailVal, _shapeVal, _speedVal, _zoomVal, _qualVal;
-    private Label? _morphTgtVal, _morphVal;
-    private Button? _arBtn;
+    private Label? _morphTgtVal, _morphVal, _roughVal, _metalVal, _emissionVal;
+    private Button? _autoMorphBtn, _arBtn;
+    private Button? _roughMinus, _roughPlus, _metalMinus, _metalPlus;
 
     public override void _Ready()
     {
@@ -65,43 +66,55 @@ public partial class WristMenu : Node3D
             margin.AddThemeConstantOverride(side, 14);
         _vp.AddChild(margin);
 
-        var col = new VBoxContainer();
-        col.AddThemeConstantOverride("separation", 8);
-        margin.AddChild(col);
+        var tabs = new TabContainer { Name = "WristTabs" };
+        margin.AddChild(tabs);
 
-        col.AddChild(Header("FRACTAL"));
-        _fracVal = SelectorRow(col, "Fractal", d => _fc?.CycleFractal(d));
-        _matVal = SelectorRow(col, "Material", d => _fc?.CycleMaterial(d));
-        _palVal = SelectorRow(col, "Palette", d => _fc?.CyclePalette(d));
-
-        col.AddChild(Header("PARAMETERS"));
-        _detailVal = StepRow(col, "Detail", d => _fc?.AdjustDetail(d), 1f);
-        _shapeVal = StepRow(col, "Shape", d => _fc?.AdjustShape(d), 0.3f);
-        _speedVal = StepRow(col, "Speed", d => _fc?.AdjustSpeed(d), 0.05f);
-        _zoomVal = StepRow(col, "Zoom", d => _fc?.AdjustZoom(d), 0.1f);
-        _qualVal = StepRow(col, "Quality", d => _fc?.AdjustQuality(d), 8f);
-
-        col.AddChild(Header("MORPH"));
-        _morphTgtVal = SelectorRow(col, "Target", d => _fc?.CycleMorphTarget(d));
-        _morphVal = StepRow(col, "Morph", d => _fc?.AdjustMorph(d), 0.1f);
+        var fractalTab = AddTab(tabs, "Fractal");
+        _fracVal = SelectorRow(fractalTab, "Fractal", d => _fc?.CycleFractal(d));
+        _detailVal = StepRow(fractalTab, "Detail", d => _fc?.AdjustDetail(d), 1f);
+        _shapeVal = StepRow(fractalTab, "Shape", d => _fc?.AdjustShape(d), 0.3f);
+        _speedVal = StepRow(fractalTab, "Speed", d => _fc?.AdjustSpeed(d), 0.05f);
+        _zoomVal = StepRow(fractalTab, "Zoom", d => _fc?.AdjustZoom(d), 0.1f);
+        _qualVal = StepRow(fractalTab, "Quality", d => _fc?.AdjustQuality(d), 8f);
 
         var rnd = new Button { Text = "Randomize", CustomMinimumSize = new Vector2(0, 60) };
         rnd.AddThemeFontSizeOverride("font_size", 24);
         rnd.Pressed += () => _fc?.Randomize();
-        col.AddChild(rnd);
+        fractalTab.AddChild(rnd);
+
+        var morphTab = AddTab(tabs, "Morph");
+        _autoMorphBtn = new Button { Text = "Auto morph: On", CustomMinimumSize = new Vector2(0, 56) };
+        _autoMorphBtn.AddThemeFontSizeOverride("font_size", 22);
+        _autoMorphBtn.Pressed += () => _fc?.ToggleAutoMorph();
+        morphTab.AddChild(_autoMorphBtn);
+        _morphTgtVal = SelectorRow(morphTab, "Target", d => _fc?.CycleMorphTarget(d));
+        _morphVal = StepRow(morphTab, "Morph", d => _fc?.AdjustMorph(d), 0.1f);
+
+        var materialTab = AddTab(tabs, "Material");
+        _matVal = SelectorRow(materialTab, "Material", d => _fc?.CycleMaterial(d));
+        _palVal = SelectorRow(materialTab, "Palette", d => _fc?.CyclePalette(d));
+        var rough = StepRowControls(materialTab, "Roughness", d => _fc?.AdjustMaterialRoughness(d), 0.1f);
+        _roughVal = rough.Value;
+        _roughMinus = rough.Minus;
+        _roughPlus = rough.Plus;
+        var metal = StepRowControls(materialTab, "Metalness", d => _fc?.AdjustMaterialMetallic(d), 0.1f);
+        _metalVal = metal.Value;
+        _metalMinus = metal.Minus;
+        _metalPlus = metal.Plus;
+        _emissionVal = StepRow(materialTab, "Emission", d => _fc?.AdjustMaterialEmission(d), 0.1f);
 
         _arBtn = new Button { Text = "AR / VR", CustomMinimumSize = new Vector2(0, 60) };
         _arBtn.AddThemeFontSizeOverride("font_size", 24);
         _arBtn.Pressed += () => _main?.ToggleAr();
-        col.AddChild(_arBtn);
+        materialTab.AddChild(_arBtn);
     }
 
-    private static Label Header(string text)
+    private static VBoxContainer AddTab(TabContainer tabs, string name)
     {
-        var l = new Label { Text = text };
-        l.AddThemeFontSizeOverride("font_size", 20);
-        l.AddThemeColorOverride("font_color", new Color(0.55f, 0.75f, 1f));
-        return l;
+        var page = new VBoxContainer { Name = name };
+        page.AddThemeConstantOverride("separation", 8);
+        tabs.AddChild(page);
+        return page;
     }
 
     private Label SelectorRow(VBoxContainer parent, string name, System.Action<int> cycle)
@@ -114,14 +127,22 @@ public partial class WristMenu : Node3D
         return value;
     }
 
-    private Label StepRow(VBoxContainer parent, string name, System.Action<float> adjust, float step)
+    private Label StepRow(VBoxContainer parent, string name, System.Action<float> adjust, float step) =>
+        StepRowControls(parent, name, adjust, step).Value;
+
+    private (Label Value, Button Minus, Button Plus) StepRowControls(
+        VBoxContainer parent, string name, System.Action<float> adjust, float step)
     {
         var (row, value) = RowBase(name);
-        row.AddChild(StepButton("-", () => adjust(-step)));
+        var minus = StepButton("-", () => adjust(-step));
+        minus.TooltipText = $"Decrease {name.ToLowerInvariant()}";
+        row.AddChild(minus);
         row.AddChild(value);
-        row.AddChild(StepButton("+", () => adjust(step)));
+        var plus = StepButton("+", () => adjust(step));
+        plus.TooltipText = $"Increase {name.ToLowerInvariant()}";
+        row.AddChild(plus);
         parent.AddChild(row);
-        return value;
+        return (value, minus, plus);
     }
 
     private (HBoxContainer, Label) RowBase(string name)
@@ -262,6 +283,15 @@ public partial class WristMenu : Node3D
         if (_qualVal is not null) _qualVal.Text = _fc.QualityText;
         if (_morphTgtVal is not null) _morphTgtVal.Text = _fc.MorphTargetName;
         if (_morphVal is not null) _morphVal.Text = _fc.MorphText;
+        if (_autoMorphBtn is not null) _autoMorphBtn.Text = _fc.AutoMorph ? "Auto morph: On" : "Auto morph: Off";
+        if (_roughVal is not null) _roughVal.Text = _fc.MaterialRoughnessValue.ToString("0.00");
+        if (_metalVal is not null) _metalVal.Text = _fc.MaterialMetallicValue.ToString("0.00");
+        if (_emissionVal is not null) _emissionVal.Text = _fc.MaterialEmissionValue.ToString("0.00");
+        bool surface = _fc.MaterialSupportsSurfaceParams;
+        if (_roughMinus is not null) _roughMinus.Disabled = !surface;
+        if (_roughPlus is not null) _roughPlus.Disabled = !surface;
+        if (_metalMinus is not null) _metalMinus.Disabled = !surface;
+        if (_metalPlus is not null) _metalPlus.Disabled = !surface;
         if (_arBtn is not null && _main is not null)
             _arBtn.Text = _main.ArAvailable ? (_main.IsAr ? "Switch to VR" : "Switch to AR") : "AR unavailable";
     }
