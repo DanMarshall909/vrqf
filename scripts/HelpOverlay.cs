@@ -12,6 +12,7 @@ public partial class HelpOverlay : CanvasLayer
         "Fractal        A/X next · B/Y prev        (F / G)\n" +
         "Material       right stick-click          (T)\n" +
         "Palette        left stick-click           (P)\n" +
+        "Colour mode    wrist menu                 (C)\n" +
         "Live param     grip  R next · L prev      (] / [)\n" +
         "Scrub param    triggers  R up · L down    (= / -)\n" +
         "Wrist menu     aim right controller; trigger to click\n" +

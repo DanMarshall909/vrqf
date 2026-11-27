@@ -54,6 +54,7 @@ public partial class FractalController : MeshInstance3D
     private int _fractal;
     private int _materialMode;
     private int _palette;
+    private int _colorMode;
     private int _liveParam;
 
     private float _iterations;
@@ -61,6 +62,8 @@ public partial class FractalController : MeshInstance3D
     private float _shapePhase;
     private float _zoom;     // fractal_extent: larger values enlarge the visible form
     private float _quality;  // max_steps
+    private float _radialHueCycles;
+    private float _radialHueOffset;
     private int _morphTarget = 1;
     private float _morph;    // 0..1 blend toward _morphTarget
     private readonly float[] _roughnessByMaterial = { 1f, 0.35f, 0.08f, 0.02f, 1f, 1f, 1f };
@@ -82,6 +85,10 @@ public partial class FractalController : MeshInstance3D
 
         _fractal = ReadInt("fractal_type");
         _materialMode = ReadInt("material_mode");
+        _colorMode = ReadInt("color_mode");
+        _radialHueCycles = ReadFloat("radial_hue_cycles");
+        if (_radialHueCycles <= 0f) _radialHueCycles = 1f;
+        _radialHueOffset = ReadFloat("radial_hue_offset");
         _iterations = ReadInt("iterations");
         if (_iterations < 2f) _iterations = 8f;
         _morphSpeed = ReadFloat("morph_speed");
@@ -102,13 +109,14 @@ public partial class FractalController : MeshInstance3D
         if (_left is not null) _left.ButtonPressed += name => OnButtonPressed(name, isLeft: true);
         if (_right is not null) _right.ButtonPressed += name => OnButtonPressed(name, isLeft: false);
 
-        GD.Print($"Fractal: {FractalName} | Material: {MaterialName} | Palette: {PaletteName}");
+        GD.Print($"Fractal: {FractalName} | Material: {MaterialName} | Colour: {ColorModeName}");
     }
 
     // ----- Display accessors (used by the WristMenu labels).
     public string FractalName => FractalNames[_fractal];
     public string MaterialName => MaterialNames[_materialMode];
     public string PaletteName => PaletteNames[_palette];
+    public string ColorModeName => _colorMode == 1 ? "Radial hue" : "Orbit palette";
     public string LiveParamName => LiveParamNames[_liveParam];
     public string DetailText => Mathf.RoundToInt(_iterations).ToString();
     public string ShapeText => _shapePhase.ToString("0.0");
@@ -126,6 +134,8 @@ public partial class FractalController : MeshInstance3D
     public float MaterialRoughnessValue => _roughnessByMaterial[_materialMode];
     public float MaterialMetallicValue => _metallicByMaterial[_materialMode];
     public float MaterialEmissionValue => _emissionByMaterial[_materialMode];
+    public float RadialHueCyclesValue => _radialHueCycles;
+    public float RadialHueOffsetValue => _radialHueOffset;
     public bool MaterialSupportsSurfaceParams => _materialMode is 1 or 2 or 3;
 
     public override void _Process(double delta)
@@ -224,6 +234,29 @@ public partial class FractalController : MeshInstance3D
     {
         _palette = Wrap(_palette + direction, _palettes.Length);
         _material?.SetShaderParameter("palette_tex", _palettes[_palette]);
+        SetColorMode(0);
+    }
+
+    public void CycleColorMode(int direction) => SetColorMode(Wrap(_colorMode + direction, 2));
+
+    public void AdjustRadialHueCycles(float delta)
+    {
+        _radialHueCycles = Mathf.Clamp(_radialHueCycles + delta, 0.25f, 4f);
+        _material?.SetShaderParameter("radial_hue_cycles", _radialHueCycles);
+        SetColorMode(1);
+    }
+
+    public void AdjustRadialHueOffset(float delta)
+    {
+        _radialHueOffset = Mathf.Clamp(_radialHueOffset + delta, 0f, 1f);
+        _material?.SetShaderParameter("radial_hue_offset", _radialHueOffset);
+        SetColorMode(1);
+    }
+
+    private void SetColorMode(int mode)
+    {
+        _colorMode = mode;
+        _material?.SetShaderParameter("color_mode", _colorMode);
     }
 
     public void CycleLiveParam(int direction) =>
@@ -281,6 +314,9 @@ public partial class FractalController : MeshInstance3D
         _fractal = (int)(GD.Randi() % (uint)FractalNames.Length);
         _materialMode = (int)(GD.Randi() % (uint)MaterialNames.Length);
         _palette = (int)(GD.Randi() % (uint)_palettes.Length);
+        _colorMode = (int)(GD.Randi() % 2);
+        _radialHueCycles = (float)GD.RandRange(0.5, 2.5);
+        _radialHueOffset = (float)GD.Randf();
         _morphTarget = Wrap(_fractal + 1 + (int)(GD.Randi() % (uint)(FractalNames.Length - 1)), FractalNames.Length);
         _shapePhase = (float)GD.RandRange(-3.0, 3.0);
         _morph = (float)GD.RandRange(0.0, 0.6);
@@ -297,6 +333,9 @@ public partial class FractalController : MeshInstance3D
         _material.SetShaderParameter("material_mode", _materialMode);
         ApplyMaterialParameters();
         _material.SetShaderParameter("palette_tex", _palettes[_palette]);
+        _material.SetShaderParameter("color_mode", _colorMode);
+        _material.SetShaderParameter("radial_hue_cycles", _radialHueCycles);
+        _material.SetShaderParameter("radial_hue_offset", _radialHueOffset);
         _material.SetShaderParameter("morph_target", _morphTarget);
         _material.SetShaderParameter("morph", _morph);
         _material.SetShaderParameter("shape", _shapePhase);
@@ -328,6 +367,7 @@ public partial class FractalController : MeshInstance3D
             case Key.G: CycleFractal(-1); break;
             case Key.T: CycleMaterial(1); break;
             case Key.P: CyclePalette(1); break;
+            case Key.C: CycleColorMode(1); break;
             case Key.Bracketright: CycleLiveParam(1); break;
             case Key.Bracketleft: CycleLiveParam(-1); break;
             case Key.M: CycleMorphTarget(1); break;

@@ -1,4 +1,4 @@
-[gd_scene load_steps=17 format=3 uid="uid://vrqfmain0"]
+[gd_scene load_steps=18 format=3 uid="uid://vrqfmain0"]
 
 [ext_resource type="Script" path="res://scripts/Main.cs" id="1_main"]
 [ext_resource type="Script" path="res://scripts/FreeLookCamera.cs" id="2_cam"]
@@ -10,6 +10,7 @@
 [ext_resource type="Script" path="res://scripts/WristMenu.cs" id="8_wrist"]
 [ext_resource type="Script" path="res://scripts/HelpOverlay.cs" id="9_help"]
 [ext_resource type="Script" path="res://scripts/ExplorerPanel.cs" id="10_explorer"]
+[ext_resource type="Texture2D" path="res://textures/palette_radial_hue.tres" id="11_radial_hue"]
 
 [sub_resource type="ProceduralSkyMaterial" id="SkyMat_1"]
 sky_top_color = Color(0.16, 0.22, 0.35, 1)
@@ -54,6 +55,10 @@ shader_parameter/epsilon = 0.0012
 shader_parameter/morph_speed = 0.25
 shader_parameter/shape = 0.0
 shader_parameter/palette_tex = ExtResource("6_palfire")
+shader_parameter/radial_hue_tex = ExtResource("11_radial_hue")
+shader_parameter/color_mode = 1
+shader_parameter/radial_hue_cycles = 1.0
+shader_parameter/radial_hue_offset = 0.0
 shader_parameter/glow_color = Color(0.6, 0.85, 1, 1)
 shader_parameter/mesh_half = 0.45
 shader_parameter/fractal_extent = 1.0

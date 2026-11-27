@@ -8,7 +8,7 @@ namespace Vrqf;
 public partial class ExplorerPanel : PanelContainer
 {
     private FractalController? _fractal;
-    private Label? _fractalName, _targetName, _materialName, _paletteName;
+    private Label? _fractalName, _targetName, _materialName, _paletteName, _colorModeName;
     private Button? _autoMorphButton;
     private HSlider? _roughnessSlider, _metallicSlider;
     private readonly List<(HSlider Slider, Label Value, Func<float> Read, string Format)> _sliders = new();
@@ -42,8 +42,16 @@ public partial class ExplorerPanel : PanelContainer
         var materialPage = AddPage(tabs, "Material");
         _materialName = AddSelector(materialPage, "Style", "Previous material", "Next material",
             d => _fractal?.CycleMaterial(d));
+        _colorModeName = AddSelector(materialPage, "Colour", "Previous colour source", "Next colour source",
+            d => _fractal?.CycleColorMode(d));
         _paletteName = AddSelector(materialPage, "Palette", "Previous palette", "Next palette",
             d => _fractal?.CyclePalette(d));
+        AddSlider(materialPage, "Hue cycles", 0.25, 4, 0.01,
+            () => _fractal?.RadialHueCyclesValue ?? 1,
+            d => _fractal?.AdjustRadialHueCycles(d));
+        AddSlider(materialPage, "Hue offset", 0, 1, 0.01,
+            () => _fractal?.RadialHueOffsetValue ?? 0,
+            d => _fractal?.AdjustRadialHueOffset(d));
         _roughnessSlider = AddSlider(materialPage, "Roughness", 0, 1, 0.01,
             () => _fractal?.MaterialRoughnessValue ?? 0,
             d => _fractal?.AdjustMaterialRoughness(d));
@@ -147,6 +155,7 @@ public partial class ExplorerPanel : PanelContainer
         if (_fractalName is not null) _fractalName.Text = _fractal.FractalName;
         if (_targetName is not null) _targetName.Text = _fractal.MorphTargetName;
         if (_materialName is not null) _materialName.Text = _fractal.MaterialName;
+        if (_colorModeName is not null) _colorModeName.Text = _fractal.ColorModeName;
         if (_paletteName is not null) _paletteName.Text = _fractal.PaletteName;
         if (_autoMorphButton is not null)
             _autoMorphButton.Text = _fractal.AutoMorph ? "Auto morph: On" : "Auto morph: Off";

@@ -1,6 +1,6 @@
 # vrqf
 
-![One morphing fractal with material controls](docs/images/single-fractal-material.png)
+![Fractal with radial hue colouring and material controls](docs/images/radial-hue.png)
 
 **vrqf** is an experimental VR quaternion fractal explorer built with **Godot**, **C#**, **OpenXR**, and custom GPU shaders.
 
@@ -17,7 +17,7 @@ The project includes:
 * Quaternion-based fractal formulas
 * Multiple fractal types
 * Morphing between fractal formulas
-* Palette and material switching
+* Radial hue texture, orbit palettes, and material switching
 * Live parameter adjustment from the desktop panel, VR wrist menu, controllers, or keyboard
 * One large fractal that automatically morphs through the available types
 * Adjustable roughness, metalness, and emission with settings remembered for each material
@@ -72,7 +72,11 @@ It is not intended to be a polished product. It is a technical and visual experi
 
 ## Controls
 
-The project supports desktop controls and VR controller input. On desktop, use the panel in the upper-right corner. Its **Material** tab selects a style and palette and adjusts roughness, metalness, and emission. Its **Fractal** tab selects the current type and morph target, pauses or resumes automatic morphing, and adjusts morph amount, detail, shape, animation speed, size, and quality. Material edits are remembered when you switch styles. Roughness and metalness apply to Plastic, Metal, and Glass; emission applies to every style.
+The project supports desktop controls and VR controller input. On desktop, use the panel in the upper-right corner. Its **Material** tab selects a style and colour source and adjusts hue cycles, hue offset, roughness, metalness, and emission. Its **Fractal** tab selects the current type and morph target, pauses or resumes automatic morphing, and adjusts morph amount, detail, shape, animation speed, size, and quality. Material edits are remembered when you switch styles. Roughness and metalness apply to Plastic, Metal, and Glass; emission applies to every style.
+
+**Radial hue** is the default colour source. The shader samples [a rainbow gradient texture](textures/palette_radial_hue.tres) using each surface point's distance from the fractal centre. Hue cycles controls how often the gradient repeats from centre to edge; hue offset rotates the colours. Choose a palette with the palette arrows or `P` to use the existing orbit colouring; choose Radial hue again with the Colour selector or `C`.
+
+![The same fractal with its hue offset changed](docs/images/radial-hue-offset.png)
 
 ![Fractal parameter controls](docs/images/single-fractal-parameters.png)
 
@@ -88,7 +92,7 @@ The project supports desktop controls and VR controller input. On desktop, use t
 | Adjust live parameter | Triggers          |
 | Toggle auto morph     | Wrist menu button |
 
-The wrist menu has **Fractal**, **Morph**, and **Material** tabs, including step controls for roughness, metalness, and emission.
+The wrist menu has **Fractal**, **Morph**, and **Material** tabs. The Material tab includes colour source, hue, roughness, metalness, and emission controls.
 
 ### Keyboard controls
 
@@ -98,6 +102,7 @@ The wrist menu has **Fractal**, **Morph**, and **Material** tabs, including step
 | Previous fractal            | `G` |
 | Change material             | `T` |
 | Change palette              | `P` |
+| Switch colour source         | `C` |
 | Next live parameter         | `]` |
 | Previous live parameter     | `[` |
 | Increase selected parameter | `=` |
@@ -137,7 +142,7 @@ At a high level:
 3. A distance estimator tells the shader how far it can safely step.
 4. When the ray approaches the fractal surface, a hit is recorded.
 5. A normal is estimated from nearby distance samples.
-6. The surface is shaded using the selected material and palette.
+6. The surface is shaded using the selected material and either the radial hue texture or an orbit palette.
 7. Depth is written so the fractal correctly interacts with the rest of the scene.
 
 The project uses object-space calculations so the fractal remains anchored correctly in the world as the player moves around it.
@@ -160,6 +165,7 @@ vrqf/
 └── textures/
     ├── palette_fire.tres
     ├── palette_ice.tres
+    ├── palette_radial_hue.tres
     ├── palette_rainbow.tres
     └── palette_viridis.tres
 ```
