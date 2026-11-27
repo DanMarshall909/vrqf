@@ -1,10 +1,10 @@
 # vrqf
 
-<img width="4996" height="2820" alt="image" src="https://github.com/user-attachments/assets/5d45b070-5d4b-4e5d-be66-0f4429f09ea5" />
+![One morphing fractal with material controls](docs/images/single-fractal-material.png)
 
 **vrqf** is an experimental VR quaternion fractal explorer built with **Godot**, **C#**, **OpenXR**, and custom GPU shaders.
 
-The project renders animated 3D fractals inside a VR scene, allowing the viewer to explore mathematical forms as spatial objects rather than flat images. It includes quaternion Julia-style fractals, Mandelbulb variants, iterated function systems, procedural materials, palette switching, morphing, and live parameter control.
+The project renders one animated 3D fractal in a VR or desktop scene. It cycles through quaternion Julia-style fractals, Mandelbulb variants, iterated function systems, and other forms, with live controls for morphing, shape, palettes, and materials.
 
 ## What it does
 
@@ -18,8 +18,9 @@ The project includes:
 * Multiple fractal types
 * Morphing between fractal formulas
 * Palette and material switching
-* Live parameter adjustment from VR controllers or keyboard
-* A small gallery layout showing several fractals at once
+* Live parameter adjustment from the desktop panel, VR wrist menu, controllers, or keyboard
+* One large fractal that automatically morphs through the available types
+* Adjustable roughness, metalness, and emission with settings remembered for each material
 * Experimental reflective, emissive, plastic, metal, glass, and matcap-style materials
 
 ## Fractals included
@@ -61,7 +62,7 @@ It is not intended to be a polished product. It is a technical and visual experi
 
 ## Technology
 
-* Godot 4.x
+* Godot 4.7 with C#/.NET support
 * C#
 * OpenXR
 * Godot spatial shaders
@@ -71,7 +72,9 @@ It is not intended to be a polished product. It is a technical and visual experi
 
 ## Controls
 
-The project supports both VR controller input and keyboard input.
+The project supports desktop controls and VR controller input. On desktop, use the panel in the upper-right corner. Its **Material** tab selects a style and palette and adjusts roughness, metalness, and emission. Its **Fractal** tab selects the current type and morph target, pauses or resumes automatic morphing, and adjusts morph amount, detail, shape, animation speed, size, and quality. Material edits are remembered when you switch styles. Roughness and metalness apply to Plastic, Metal, and Glass; emission applies to every style.
+
+![Fractal parameter controls](docs/images/single-fractal-parameters.png)
 
 ### VR controls
 
@@ -83,6 +86,9 @@ The project supports both VR controller input and keyboard input.
 | Change palette        | Left stick click  |
 | Select live parameter | Grip              |
 | Adjust live parameter | Triggers          |
+| Toggle auto morph     | Wrist menu button |
+
+The wrist menu has **Fractal**, **Morph**, and **Material** tabs, including step controls for roughness, metalness, and emission.
 
 ### Keyboard controls
 
@@ -99,7 +105,10 @@ The project supports both VR controller input and keyboard input.
 | Change morph target         | `M` |
 | Increase morph amount       | `.` |
 | Decrease morph amount       | `,` |
+| Toggle automatic morphing   | `Space` |
 | Randomise                   | `R` |
+
+The fractal cycles through types automatically. Adjusting the morph amount manually pauses the cycle; press `Space` or the Auto morph button in either panel to resume it.
 
 Movement uses the standard WASD-style bindings:
 
@@ -112,6 +121,8 @@ Movement uses the standard WASD-style bindings:
 | Move up              | `E`   |
 | Move down            | `Q`   |
 | Toggle mouse capture | `Esc` |
+
+The pointer starts visible so you can use the panel. Click the scene to capture it for mouse look, then press `Esc` to release it.
 
 ## How it works
 
@@ -131,11 +142,9 @@ At a high level:
 
 The project uses object-space calculations so the fractal remains anchored correctly in the world as the player moves around it.
 
-## Gallery mode
+## Single-fractal mode
 
-The scene includes a gallery layout that arranges fractals in a 2×2×2 grid.
-
-One fractal is interactive and controlled by the player. The remaining positions are populated with static fractals using varied types, palettes, and material settings. This gives the scene a small “fractal showroom” feel and makes it easier to compare different forms.
+The scene displays one interactive fractal. Its shader blends the current type's distance estimate with the next type's distance estimate over three seconds, then continues through the available types. You can choose a type, target, palette, material, and live parameters at any time.
 
 ## Project structure
 
@@ -145,8 +154,7 @@ vrqf/
 ├── scenes/
 │   └── main.tscn
 ├── scripts/
-│   ├── FractalController.cs
-│   └── Gallery.cs
+│   └── FractalController.cs
 ├── shaders/
 │   └── quaternion_julia.gdshader
 └── textures/
@@ -158,13 +166,13 @@ vrqf/
 
 ## Running the project
 
-1. Install Godot 4.x with C#/.NET support.
+1. Install Godot 4.7 with C#/.NET support and the .NET 10 SDK.
 2. Clone the repository.
 3. Open the project in Godot.
 4. Ensure OpenXR is available if running in VR.
 5. Run the main scene.
 
-The project can be inspected in the Godot editor even without a VR headset, although the intended experience is VR.
+The project also runs in desktop mode without an OpenXR runtime. The desktop panel appears automatically when OpenXR is unavailable.
 
 ## Notes
 
@@ -177,17 +185,15 @@ This is an experimental project and may require adjustment depending on:
 * shader compatibility
 * platform-specific XR setup
 
-The shader is computationally heavy, especially when multiple fractals are visible at once. Quality, iteration count, and raymarch step count may need to be reduced on lower-end hardware.
+The shader is computationally heavy, especially while it evaluates two fractal types during a morph. Quality, iteration count, and raymarch step count may need to be reduced on lower-end hardware.
 
 ## Areas for future improvement
 
 Possible next steps:
 
-* Add screenshots or video captures
 * Add proper in-world UI documentation
 * Add presets for interesting fractal states
 * Save and load favourite configurations
-* Improve desktop/non-VR navigation
 * Add performance quality profiles
 * Add hand/controller interaction for grabbing and scaling fractals
 * Add more fractal formulas

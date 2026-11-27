@@ -3,9 +3,9 @@ using Godot;
 namespace Vrqf;
 
 // Owns all of the fractal shader's tweakable settings and applies them to the
-// Cube's ShaderMaterial. Driven by the controllers/keyboard (here) and by the
-// WristMenu UI (which calls the public Cycle*/Adjust* methods), so both stay in
-// sync — the ShaderMaterial is the single source of truth.
+// fractal mesh's ShaderMaterial. Driven by the controllers/keyboard (here) and
+// the desktop and wrist panels (which call the public Cycle*/Adjust* methods).
+// All controls update the same ShaderMaterial.
 //
 //   Fractal:   VR A/X = next, B/Y = prev              | keyboard F / G
 //   Material:  VR right stick-click                   | keyboard T
@@ -16,6 +16,8 @@ public partial class FractalController : MeshInstance3D
 {
     [Export] public NodePath LeftControllerPath { get; set; } = "../XROrigin3D/LeftController";
     [Export] public NodePath RightControllerPath { get; set; } = "../XROrigin3D/RightController";
+    [Export] public bool AutoMorph { get; set; } = true;
+    [Export] public float MorphTransitionSeconds { get; set; } = 3f;
 
     public static readonly string[] FractalNames =
     {
@@ -57,10 +59,13 @@ public partial class FractalController : MeshInstance3D
     private float _iterations;
     private float _morphSpeed;
     private float _shapePhase;
-    private float _zoom;     // fractal_extent
+    private float _zoom;     // fractal_extent: larger values enlarge the visible form
     private float _quality;  // max_steps
     private int _morphTarget = 1;
     private float _morph;    // 0..1 blend toward _morphTarget
+    private readonly float[] _roughnessByMaterial = { 1f, 0.35f, 0.08f, 0.02f, 1f, 1f, 1f };
+    private readonly float[] _metallicByMaterial = { 0f, 0f, 1f, 0f, 0f, 0f, 0f };
+    private readonly float[] _emissionByMaterial = { 1f, 0.05f, 0f, 0.25f, 1f, 1f, 1f };
 
     public override void _Ready()
     {
@@ -71,7 +76,7 @@ public partial class FractalController : MeshInstance3D
 
         if (_material is null)
         {
-            GD.PushWarning("FractalController: Cube has no ShaderMaterial — switching disabled.");
+            GD.PushWarning("FractalController: fractal mesh has no ShaderMaterial — switching disabled.");
             return;
         }
 
@@ -80,12 +85,14 @@ public partial class FractalController : MeshInstance3D
         _iterations = ReadInt("iterations");
         if (_iterations < 2f) _iterations = 8f;
         _morphSpeed = ReadFloat("morph_speed");
+        _shapePhase = ReadFloat("shape");
         _zoom = ReadFloat("fractal_extent");
         if (_zoom <= 0f) _zoom = 1f;
         _quality = ReadInt("max_steps");
         if (_quality < 16f) _quality = 96f;
         _morphTarget = ReadInt("morph_target");
         _morph = ReadFloat("morph");
+        ApplyMaterialParameters();
 
         for (int i = 0; i < PalettePaths.Length; i++)
             _palettes[i] = GD.Load<Texture2D>(PalettePaths[i]);
@@ -110,10 +117,34 @@ public partial class FractalController : MeshInstance3D
     public string QualityText => Mathf.RoundToInt(_quality).ToString();
     public string MorphTargetName => FractalNames[_morphTarget];
     public string MorphText => _morph.ToString("0.00");
+    public float DetailValue => _iterations;
+    public float ShapeValue => _shapePhase;
+    public float SpeedValue => _morphSpeed;
+    public float ZoomValue => _zoom;
+    public float QualityValue => _quality;
+    public float MorphValue => _morph;
+    public float MaterialRoughnessValue => _roughnessByMaterial[_materialMode];
+    public float MaterialMetallicValue => _metallicByMaterial[_materialMode];
+    public float MaterialEmissionValue => _emissionByMaterial[_materialMode];
+    public bool MaterialSupportsSurfaceParams => _materialMode is 1 or 2 or 3;
 
     public override void _Process(double delta)
     {
         if (_material is null) return;
+
+        if (AutoMorph)
+        {
+            _morph += (float)delta / Mathf.Max(MorphTransitionSeconds, 0.1f);
+            while (_morph >= 1f)
+            {
+                _morph -= 1f;
+                _fractal = _morphTarget;
+                _morphTarget = Wrap(_morphTarget + 1, FractalNames.Length);
+                _material.SetShaderParameter("fractal_type", _fractal);
+                _material.SetShaderParameter("morph_target", _morphTarget);
+            }
+            _material.SetShaderParameter("morph", _morph);
+        }
 
         float input = Mathf.Clamp(TriggerInput() + KeyboardScrub(), -1f, 1f);
         if (Mathf.Abs(input) <= 0.001f) return;
@@ -149,6 +180,11 @@ public partial class FractalController : MeshInstance3D
     public void CycleFractal(int direction)
     {
         _fractal = Wrap(_fractal + direction, FractalNames.Length);
+        if (_fractal == _morphTarget)
+        {
+            _morphTarget = Wrap(_fractal + 1, FractalNames.Length);
+            _material?.SetShaderParameter("morph_target", _morphTarget);
+        }
         _material?.SetShaderParameter("fractal_type", _fractal);
     }
 
@@ -156,6 +192,32 @@ public partial class FractalController : MeshInstance3D
     {
         _materialMode = Wrap(_materialMode + direction, MaterialNames.Length);
         _material?.SetShaderParameter("material_mode", _materialMode);
+        ApplyMaterialParameters();
+    }
+
+    public void AdjustMaterialRoughness(float delta)
+    {
+        _roughnessByMaterial[_materialMode] = Mathf.Clamp(MaterialRoughnessValue + delta, 0f, 1f);
+        _material?.SetShaderParameter("material_roughness", MaterialRoughnessValue);
+    }
+
+    public void AdjustMaterialMetallic(float delta)
+    {
+        _metallicByMaterial[_materialMode] = Mathf.Clamp(MaterialMetallicValue + delta, 0f, 1f);
+        _material?.SetShaderParameter("material_metallic", MaterialMetallicValue);
+    }
+
+    public void AdjustMaterialEmission(float delta)
+    {
+        _emissionByMaterial[_materialMode] = Mathf.Clamp(MaterialEmissionValue + delta, 0f, 2f);
+        _material?.SetShaderParameter("material_emission", MaterialEmissionValue);
+    }
+
+    private void ApplyMaterialParameters()
+    {
+        _material?.SetShaderParameter("material_roughness", MaterialRoughnessValue);
+        _material?.SetShaderParameter("material_metallic", MaterialMetallicValue);
+        _material?.SetShaderParameter("material_emission", MaterialEmissionValue);
     }
 
     public void CyclePalette(int direction)
@@ -200,21 +262,26 @@ public partial class FractalController : MeshInstance3D
     public void CycleMorphTarget(int direction)
     {
         _morphTarget = Wrap(_morphTarget + direction, FractalNames.Length);
+        if (_morphTarget == _fractal)
+            _morphTarget = Wrap(_morphTarget + (direction < 0 ? -1 : 1), FractalNames.Length);
         _material?.SetShaderParameter("morph_target", _morphTarget);
     }
 
     public void AdjustMorph(float delta)
     {
+        AutoMorph = false;
         _morph = Mathf.Clamp(_morph + delta, 0f, 1f);
         _material?.SetShaderParameter("morph", _morph);
     }
+
+    public void ToggleAutoMorph() => AutoMorph = !AutoMorph;
 
     public void Randomize()
     {
         _fractal = (int)(GD.Randi() % (uint)FractalNames.Length);
         _materialMode = (int)(GD.Randi() % (uint)MaterialNames.Length);
         _palette = (int)(GD.Randi() % (uint)_palettes.Length);
-        _morphTarget = (int)(GD.Randi() % (uint)FractalNames.Length);
+        _morphTarget = Wrap(_fractal + 1 + (int)(GD.Randi() % (uint)(FractalNames.Length - 1)), FractalNames.Length);
         _shapePhase = (float)GD.RandRange(-3.0, 3.0);
         _morph = (float)GD.RandRange(0.0, 0.6);
         _morphSpeed = (float)GD.RandRange(0.0, 0.6);
@@ -228,6 +295,7 @@ public partial class FractalController : MeshInstance3D
         if (_material is null) return;
         _material.SetShaderParameter("fractal_type", _fractal);
         _material.SetShaderParameter("material_mode", _materialMode);
+        ApplyMaterialParameters();
         _material.SetShaderParameter("palette_tex", _palettes[_palette]);
         _material.SetShaderParameter("morph_target", _morphTarget);
         _material.SetShaderParameter("morph", _morph);
@@ -265,6 +333,7 @@ public partial class FractalController : MeshInstance3D
             case Key.M: CycleMorphTarget(1); break;
             case Key.Period: AdjustMorph(0.1f); break;
             case Key.Comma: AdjustMorph(-0.1f); break;
+            case Key.Space: ToggleAutoMorph(); break;
             case Key.R: Randomize(); break;
         }
     }

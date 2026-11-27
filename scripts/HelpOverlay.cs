@@ -14,9 +14,10 @@ public partial class HelpOverlay : CanvasLayer
         "Palette        left stick-click           (P)\n" +
         "Live param     grip  R next · L prev      (] / [)\n" +
         "Scrub param    triggers  R up · L down    (= / -)\n" +
-        "Wrist menu     poke the panel on your left wrist\n" +
+        "Wrist menu     aim right controller; trigger to click\n" +
         "Morph target   wrist menu                 (M)\n" +
-        "Morph amount   wrist menu                 (, / .)\n" +
+        "Morph amount   wrist menu · pauses auto   (, / .)\n" +
+        "Auto morph     wrist-menu button          (Space)\n" +
         "Randomize      wrist-menu button          (R)\n" +
         "AR / VR        wrist-menu button          (V)\n" +
         "Help           menu button                (?)";

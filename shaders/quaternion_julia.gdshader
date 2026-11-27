@@ -27,6 +27,9 @@ uniform int fractal_type = 0;
 uniform int morph_target = 1;        // fractal to morph toward
 uniform float morph = 0.0;           // 0 = fractal_type, 1 = morph_target (blends the DEs)
 uniform int material_mode = 0;
+uniform float material_roughness : hint_range(0.0, 1.0) = 1.0;
+uniform float material_metallic : hint_range(0.0, 1.0) = 0.0;
+uniform float material_emission : hint_range(0.0, 2.0) = 1.0;
 uniform int max_steps = 96;
 uniform int iterations = 8;
 uniform float epsilon = 0.0012;
@@ -425,7 +428,7 @@ void fragment() {
 
 	// Object -> fractal domain scale (per-fractal fit; radius blends while morphing).
 	float radius = mix(fractal_radius(fractal_type), fractal_radius(morph_target), morph);
-	float scale = radius * fractal_extent / mesh_half;
+	float scale = radius / (max(fractal_extent, 0.01) * mesh_half);
 
 	// Animation phase shared by every fractal (morph_speed scales it; 0 = frozen).
 	float anim = TIME * morph_speed;
@@ -466,50 +469,51 @@ void fragment() {
 	if (material_mode == 1) {
 		// Plastic: lit dielectric tinted by the palette.
 		ALBEDO = pal;
-		METALLIC = 0.0;
-		ROUGHNESS = 0.35;
+		METALLIC = material_metallic;
+		ROUGHNESS = material_roughness;
 		SPECULAR = 0.5;
-		EMISSION = pal * 0.05;
+		EMISSION = pal * material_emission;
 	} else if (material_mode == 2) {
 		// Metal: reflects the real scene via ReflectionProbe + SSR.
 		ALBEDO = mix(pal, vec3(1.0), 0.6);
-		METALLIC = 1.0;
-		ROUGHNESS = 0.08;
+		METALLIC = material_metallic;
+		ROUGHNESS = material_roughness;
 		SPECULAR = 0.5;
+		EMISSION = pal * material_emission;
 	} else if (material_mode == 3) {
 		// Glass: smooth, strongly reflective dielectric (fresnel-driven).
 		// Not true refraction — reflections only (see notes).
 		ALBEDO = mix(pal * 0.2, vec3(1.0), fres);
-		METALLIC = 0.0;
-		ROUGHNESS = 0.02;
+		METALLIC = material_metallic;
+		ROUGHNESS = material_roughness;
 		SPECULAR = 1.0;
-		EMISSION = glow_color * fres * 0.25;
+		EMISSION = glow_color * fres * material_emission;
 	} else if (material_mode == 4) {
 		// Matcap chrome.
 		vec3 m = procedural_matcap(n_view, vec3(0.8, 0.85, 0.95), 24.0);
 		ALBEDO = vec3(0.0);
-		EMISSION = m;
+		EMISSION = m * material_emission;
 		METALLIC = 0.0;
 		ROUGHNESS = 1.0;
 	} else if (material_mode == 5) {
 		// Matcap gold.
 		vec3 m = procedural_matcap(n_view, vec3(1.0, 0.75, 0.3), 16.0);
 		ALBEDO = vec3(0.0);
-		EMISSION = m;
+		EMISSION = m * material_emission;
 		METALLIC = 0.0;
 		ROUGHNESS = 1.0;
 	} else if (material_mode == 6) {
 		// Matcap pearl.
 		vec3 m = procedural_matcap(n_view, mix(pal, vec3(0.95), 0.5), 8.0);
 		ALBEDO = vec3(0.0);
-		EMISSION = m;
+		EMISSION = m * material_emission;
 		METALLIC = 0.0;
 		ROUGHNESS = 1.0;
 	} else {
 		// Glow: emissive palette (the default look).
 		vec3 col = pal * (0.4 + fres * 0.6) + glow_color * fres * 0.5;
 		ALBEDO = vec3(0.0);
-		EMISSION = col;
+		EMISSION = col * material_emission;
 		METALLIC = 0.0;
 		ROUGHNESS = 1.0;
 	}

@@ -12,7 +12,9 @@ public partial class FreeLookCamera : Camera3D
 
     public override void _Ready()
     {
-        Input.MouseMode = Input.MouseModeEnum.Captured;
+        // Leave the pointer available for the desktop explorer controls.
+        // Clicking the scene captures it for free look; Esc releases it again.
+        Input.MouseMode = Input.MouseModeEnum.Visible;
         var euler = GlobalTransform.Basis.GetEuler();
         _yaw = euler.Y;
         _pitch = euler.X;
