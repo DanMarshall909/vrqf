@@ -49,6 +49,23 @@ func _run() -> void:
 			return
 
 	print("PASS: wrist menu exposes material parameters and updates the shader")
+	tabs.current_tab = tabs.get_tab_idx_from_control(tabs.get_node("Fractal"))
+	var desktop_tabs: TabContainer = scene.get_node("HUD/ExplorerPanel/Tabs")
+	desktop_tabs.current_tab = desktop_tabs.get_tab_idx_from_control(desktop_tabs.get_node("Fractal"))
+	active.call("CycleFractal", 4) # Sierpinski Tetrahedron is one of the longest names.
+	await process_frame
+	var wrist_name := _find_selector_value(tabs.get_node("Fractal"), "Fractal")
+	var desktop_panel: Control = scene.get_node("HUD/ExplorerPanel")
+	var desktop_name := _find_selector_value(desktop_panel, "Type")
+	if wrist_name == null or desktop_name == null or not _text_fits(wrist_name) or not _text_fits(desktop_name) \
+			or wrist_name.get_parent().get_global_rect().position.x < 0 \
+			or wrist_name.get_parent().get_global_rect().end.x > wrist_name.get_viewport().get_visible_rect().end.x \
+			or desktop_name.get_parent().get_global_rect().position.x < desktop_panel.get_global_rect().position.x \
+			or desktop_name.get_parent().get_global_rect().end.x > desktop_panel.get_global_rect().end.x:
+		push_error("Long fractal names must fit the wrist and desktop selectors")
+		quit(1)
+		return
+	print("PASS: long fractal names fit both selectors")
 	quit(0)
 
 
@@ -70,3 +87,21 @@ func _find_button(node: Node, hint: String) -> Button:
 		if result != null:
 			return result
 	return null
+
+
+func _find_selector_value(node: Node, title: String) -> Label:
+	if node is HBoxContainer and node.get_child_count() == 4:
+		var first := node.get_child(0)
+		if first is Label and first.text == title and node.get_child(2) is Label:
+			return node.get_child(2)
+	for child in node.get_children():
+		var result := _find_selector_value(child, title)
+		if result != null:
+			return result
+	return null
+
+
+func _text_fits(label: Label) -> bool:
+	var font := label.get_theme_font("font")
+	var width := font.get_string_size(label.text, HORIZONTAL_ALIGNMENT_LEFT, -1, label.get_theme_font_size("font_size")).x
+	return width <= label.size.x

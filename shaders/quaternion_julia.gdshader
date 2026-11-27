@@ -428,7 +428,7 @@ void fragment() {
 
 	// Object -> fractal domain scale (per-fractal fit; radius blends while morphing).
 	float radius = mix(fractal_radius(fractal_type), fractal_radius(morph_target), morph);
-	float scale = radius * fractal_extent / mesh_half;
+	float scale = radius / (max(fractal_extent, 0.01) * mesh_half);
 
 	// Animation phase shared by every fractal (morph_speed scales it; 0 = frozen).
 	float anim = TIME * morph_speed;

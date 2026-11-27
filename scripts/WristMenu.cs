@@ -120,9 +120,9 @@ public partial class WristMenu : Node3D
     private Label SelectorRow(VBoxContainer parent, string name, System.Action<int> cycle)
     {
         var (row, value) = RowBase(name);
-        row.AddChild(StepButton("<", () => cycle(-1)));
+        row.AddChild(StepButton("<", () => cycle(-1), 52));
         row.AddChild(value);
-        row.AddChild(StepButton(">", () => cycle(1)));
+        row.AddChild(StepButton(">", () => cycle(1), 52));
         parent.AddChild(row);
         return value;
     }
@@ -158,14 +158,14 @@ public partial class WristMenu : Node3D
             CustomMinimumSize = new Vector2(96, 0),
             HorizontalAlignment = HorizontalAlignment.Center,
         };
-        value.AddThemeFontSizeOverride("font_size", 22);
+        value.AddThemeFontSizeOverride("font_size", 18);
         value.AddThemeColorOverride("font_color", new Color(0.95f, 0.85f, 0.4f));
         return (row, value);
     }
 
-    private static Button StepButton(string text, System.Action onPressed)
+    private static Button StepButton(string text, System.Action onPressed, float width = 64)
     {
-        var b = new Button { Text = text, CustomMinimumSize = new Vector2(64, 56) };
+        var b = new Button { Text = text, CustomMinimumSize = new Vector2(width, 56) };
         b.AddThemeFontSizeOverride("font_size", 26);
         b.Pressed += () => onPressed();
         return b;

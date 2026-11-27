@@ -59,7 +59,7 @@ public partial class FractalController : MeshInstance3D
     private float _iterations;
     private float _morphSpeed;
     private float _shapePhase;
-    private float _zoom;     // fractal_extent
+    private float _zoom;     // fractal_extent: larger values enlarge the visible form
     private float _quality;  // max_steps
     private int _morphTarget = 1;
     private float _morph;    // 0..1 blend toward _morphTarget
