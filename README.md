@@ -1,5 +1,7 @@
 # vrqf
 
+<img width="4996" height="2820" alt="image" src="https://github.com/user-attachments/assets/5d45b070-5d4b-4e5d-be66-0f4429f09ea5" />
+
 **vrqf** is an experimental VR quaternion fractal explorer built with **Godot**, **C#**, **OpenXR**, and custom GPU shaders.
 
 The project renders animated 3D fractals inside a VR scene, allowing the viewer to explore mathematical forms as spatial objects rather than flat images. It includes quaternion Julia-style fractals, Mandelbulb variants, iterated function systems, procedural materials, palette switching, morphing, and live parameter control.
