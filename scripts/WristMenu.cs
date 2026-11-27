@@ -28,8 +28,8 @@ public partial class WristMenu : Node3D
     private float _panelHeight;
     private float _prevTrigger;
 
-    private Label? _fracVal, _matVal, _palVal, _detailVal, _shapeVal, _speedVal, _zoomVal, _qualVal;
-    private Label? _morphTgtVal, _morphVal, _roughVal, _metalVal, _emissionVal;
+    private Label? _fracVal, _matVal, _palVal, _colorVal, _detailVal, _shapeVal, _speedVal, _zoomVal, _qualVal;
+    private Label? _morphTgtVal, _morphVal, _roughVal, _metalVal, _emissionVal, _hueCyclesVal, _hueOffsetVal;
     private Button? _autoMorphBtn, _arBtn;
     private Button? _roughMinus, _roughPlus, _metalMinus, _metalPlus;
 
@@ -90,9 +90,17 @@ public partial class WristMenu : Node3D
         _morphTgtVal = SelectorRow(morphTab, "Target", d => _fc?.CycleMorphTarget(d));
         _morphVal = StepRow(morphTab, "Morph", d => _fc?.AdjustMorph(d), 0.1f);
 
+        _arBtn = new Button { Text = "AR / VR", CustomMinimumSize = new Vector2(0, 60) };
+        _arBtn.AddThemeFontSizeOverride("font_size", 24);
+        _arBtn.Pressed += () => _main?.ToggleAr();
+        morphTab.AddChild(_arBtn);
+
         var materialTab = AddTab(tabs, "Material");
         _matVal = SelectorRow(materialTab, "Material", d => _fc?.CycleMaterial(d));
+        _colorVal = SelectorRow(materialTab, "Colour", d => _fc?.CycleColorMode(d));
         _palVal = SelectorRow(materialTab, "Palette", d => _fc?.CyclePalette(d));
+        _hueCyclesVal = StepRow(materialTab, "Hue cycles", d => _fc?.AdjustRadialHueCycles(d), 0.1f);
+        _hueOffsetVal = StepRow(materialTab, "Hue offset", d => _fc?.AdjustRadialHueOffset(d), 0.05f);
         var rough = StepRowControls(materialTab, "Roughness", d => _fc?.AdjustMaterialRoughness(d), 0.1f);
         _roughVal = rough.Value;
         _roughMinus = rough.Minus;
@@ -102,11 +110,6 @@ public partial class WristMenu : Node3D
         _metalMinus = metal.Minus;
         _metalPlus = metal.Plus;
         _emissionVal = StepRow(materialTab, "Emission", d => _fc?.AdjustMaterialEmission(d), 0.1f);
-
-        _arBtn = new Button { Text = "AR / VR", CustomMinimumSize = new Vector2(0, 60) };
-        _arBtn.AddThemeFontSizeOverride("font_size", 24);
-        _arBtn.Pressed += () => _main?.ToggleAr();
-        materialTab.AddChild(_arBtn);
     }
 
     private static VBoxContainer AddTab(TabContainer tabs, string name)
@@ -275,7 +278,10 @@ public partial class WristMenu : Node3D
         if (_fc is null) return;
         if (_fracVal is not null) _fracVal.Text = _fc.FractalName;
         if (_matVal is not null) _matVal.Text = _fc.MaterialName;
+        if (_colorVal is not null) _colorVal.Text = _fc.ColorModeName;
         if (_palVal is not null) _palVal.Text = _fc.PaletteName;
+        if (_hueCyclesVal is not null) _hueCyclesVal.Text = _fc.RadialHueCyclesValue.ToString("0.00");
+        if (_hueOffsetVal is not null) _hueOffsetVal.Text = _fc.RadialHueOffsetValue.ToString("0.00");
         if (_detailVal is not null) _detailVal.Text = _fc.DetailText;
         if (_shapeVal is not null) _shapeVal.Text = _fc.ShapeText;
         if (_speedVal is not null) _speedVal.Text = _fc.SpeedText;

@@ -1,7 +1,7 @@
-// Raymarched 3D fractal explorer, rendered inside the box volume.
+// Raymarched 3D fractal explorer, rendered inside a spherical proxy volume.
 //
-// This runs on the Cube MeshInstance3D, so the fractal is anchored exactly
-// where the box sits in world space. Working entirely in object space (and
+// This runs on the Fractal MeshInstance3D, so the fractal is anchored exactly
+// where the proxy sits in world space. Working entirely in object space (and
 // letting Godot's transform pipeline do the rest) is what keeps it in the
 // correct position from every viewpoint as the player moves or turns.
 //
@@ -36,6 +36,10 @@ uniform float epsilon = 0.0012;
 uniform float morph_speed = 0.25;    // animation rate for ALL fractals (0 = frozen)
 uniform float shape = 0.0;           // per-fractal shape parameter (scrubbed)
 uniform sampler2D palette_tex : source_color, hint_default_white;
+uniform sampler2D radial_hue_tex : source_color, hint_default_white;
+uniform int color_mode = 1;          // 0 = orbit palette, 1 = radial hue
+uniform float radial_hue_cycles : hint_range(0.25, 4.0) = 1.0;
+uniform float radial_hue_offset : hint_range(0.0, 1.0) = 0.0;
 uniform vec3 glow_color : source_color = vec3(0.6, 0.85, 1.0);
 uniform float mesh_half = 0.15;      // proxy sphere radius (object space)
 uniform float fractal_extent = 1.0;  // global size multiplier (1 = auto-fit per fractal)
@@ -433,7 +437,7 @@ void fragment() {
 	// Animation phase shared by every fractal (morph_speed scales it; 0 = frozen).
 	float anim = TIME * morph_speed;
 
-	// Sphere-trace through the box.
+	// Sphere-trace through the proxy volume.
 	float t = t_near;
 	bool hit = false;
 	float trap = 0.0;
@@ -462,8 +466,13 @@ void fragment() {
 	vec3 n_view = normalize((VIEW_MATRIX * MODEL_MATRIX * vec4(n_obj, 0.0)).xyz);
 	NORMAL = n_view;
 
-	// Palette colour from the orbit trap.
-	vec3 pal = texture(palette_tex, vec2(trap, 0.5)).rgb;
+	// Sample a 1D hue texture by 3D distance from the fractal centre.
+	// Object-space position keeps the colours fixed as the camera moves.
+	float radial_distance = clamp(length(p_obj) / mesh_half, 0.0, 1.0);
+	float hue_lookup = fract(radial_distance * radial_hue_cycles + radial_hue_offset);
+	vec3 pal = color_mode == 1
+		? texture(radial_hue_tex, vec2(hue_lookup, 0.5)).rgb
+		: texture(palette_tex, vec2(trap, 0.5)).rgb;
 	float fres = pow(1.0 - clamp(dot(n_view, vec3(0.0, 0.0, 1.0)), 0.0, 1.0), 3.0);
 
 	if (material_mode == 1) {
@@ -475,7 +484,7 @@ void fragment() {
 		EMISSION = pal * material_emission;
 	} else if (material_mode == 2) {
 		// Metal: reflects the real scene via ReflectionProbe + SSR.
-		ALBEDO = mix(pal, vec3(1.0), 0.6);
+		ALBEDO = mix(pal, vec3(1.0), color_mode == 1 ? 0.3 : 0.6);
 		METALLIC = material_metallic;
 		ROUGHNESS = material_roughness;
 		SPECULAR = 0.5;
@@ -490,14 +499,16 @@ void fragment() {
 		EMISSION = glow_color * fres * material_emission;
 	} else if (material_mode == 4) {
 		// Matcap chrome.
-		vec3 m = procedural_matcap(n_view, vec3(0.8, 0.85, 0.95), 24.0);
+		vec3 tint = color_mode == 1 ? mix(vec3(0.8, 0.85, 0.95), pal, 0.5) : vec3(0.8, 0.85, 0.95);
+		vec3 m = procedural_matcap(n_view, tint, 24.0);
 		ALBEDO = vec3(0.0);
 		EMISSION = m * material_emission;
 		METALLIC = 0.0;
 		ROUGHNESS = 1.0;
 	} else if (material_mode == 5) {
 		// Matcap gold.
-		vec3 m = procedural_matcap(n_view, vec3(1.0, 0.75, 0.3), 16.0);
+		vec3 tint = color_mode == 1 ? mix(vec3(1.0, 0.75, 0.3), pal, 0.5) : vec3(1.0, 0.75, 0.3);
+		vec3 m = procedural_matcap(n_view, tint, 16.0);
 		ALBEDO = vec3(0.0);
 		EMISSION = m * material_emission;
 		METALLIC = 0.0;
