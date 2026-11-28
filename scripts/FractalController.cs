@@ -18,6 +18,8 @@ public partial class FractalController : MeshInstance3D
     [Export] public NodePath LeftControllerPath { get; set; } = "../XROrigin3D/LeftController";
     [Export] public NodePath RightControllerPath { get; set; } = "../XROrigin3D/RightController";
     private bool _autoMorph = true;
+    private bool _animationPaused;
+    private bool _editingMorphTarget;
     private float _morphHoldSeconds = 2.5f;
     private float _morphTransitionSeconds = 3f;
 
@@ -29,6 +31,29 @@ public partial class FractalController : MeshInstance3D
         {
             if (_autoMorph == value) return;
             _autoMorph = value;
+            NotifyChanged();
+        }
+    }
+
+    [Export]
+    public bool AnimationPaused
+    {
+        get => _animationPaused;
+        set
+        {
+            if (_animationPaused == value) return;
+            _animationPaused = value;
+            NotifyChanged();
+        }
+    }
+
+    public bool EditingMorphTarget
+    {
+        get => _editingMorphTarget;
+        set
+        {
+            if (_editingMorphTarget == value) return;
+            _editingMorphTarget = value;
             NotifyChanged();
         }
     }
@@ -108,6 +133,7 @@ public partial class FractalController : MeshInstance3D
     private float _morph;    // 0..1 blend toward _morphTarget
     private float _morphLinear;
     private float _morphHoldRemaining;
+    private float _animPhase;
     private readonly float[,] _formulaParams = new float[FractalSchema.Fractals.Length, FractalSchema.MaxFormulaParams];
     private readonly float[] _roughnessByMaterial = { 1f, 0.35f, 0.08f, 0.02f, 1f, 1f, 1f, 0.25f, 0.18f, 0.45f, 0.30f, 0.10f, 0.20f };
     private readonly float[] _metallicByMaterial = { 0f, 0f, 1f, 0f, 0f, 0f, 0f, 0f, 0.05f, 0.15f, 0.10f, 0.35f, 0.40f };
@@ -166,7 +192,11 @@ public partial class FractalController : MeshInstance3D
 
     // ----- Display accessors (used by the desktop and VR UIs).
     public int FractalTypeIndex => _fractal;
+    public int MorphTargetIndex => _morphTarget;
+    public int EditedFormulaFractalIndex => _editingMorphTarget ? _morphTarget : _fractal;
+    public string EditedFormulaFractalName => FractalNames[EditedFormulaFractalIndex];
     public FormulaParamSpec[] CurrentFormulaParams => FractalSchema.Fractals[_fractal].Params;
+    public FormulaParamSpec[] EditedFormulaParams => FractalSchema.Fractals[EditedFormulaFractalIndex].Params;
     public string FractalName => FractalNames[_fractal];
     public string MaterialName => MaterialNames[_materialMode];
     public string PaletteName => PaletteNames[_palette];
@@ -193,11 +223,19 @@ public partial class FractalController : MeshInstance3D
     public float AoStrengthValue => _aoStrength;
     public float ShadowStrengthValue => _shadowStrength;
     public bool MaterialSupportsSurfaceParams => _materialMode is 1 or 2 or 3 or >= 7;
-    public float GetFormulaParam(int index) => _formulaParams[_fractal, index];
+    public float GetFormulaParam(int index) => GetFormulaParamFor(_fractal, index);
+    public float GetFormulaParamFor(int fractalIndex, int index) => _formulaParams[fractalIndex, index];
+    public float GetEditedFormulaParam(int index) => _formulaParams[EditedFormulaFractalIndex, index];
 
     public override void _Process(double delta)
     {
         if (_material is null) return;
+
+        if (!_animationPaused && _morphSpeed > 0f)
+        {
+            _animPhase += (float)delta * _morphSpeed;
+            _material.SetShaderParameter("anim_phase", _animPhase);
+        }
 
         if (AutoMorph)
         {
@@ -327,21 +365,30 @@ public partial class FractalController : MeshInstance3D
 
     public void AdjustMorphTransitionSeconds(float delta) => MorphTransitionSeconds += delta;
 
-    public void AdjustFormulaParam(int index, float delta)
+    public void AdjustFormulaParam(int index, float delta) => AdjustFormulaParamFor(_fractal, index, delta);
+
+    public void AdjustEditedFormulaParam(int index, float delta) =>
+        AdjustFormulaParamFor(EditedFormulaFractalIndex, index, delta);
+
+    public void AdjustFormulaParamFor(int fractalIndex, int index, float delta)
     {
-        var specs = CurrentFormulaParams;
+        var specs = FractalSchema.Fractals[fractalIndex].Params;
         if ((uint)index >= (uint)specs.Length) return;
         var spec = specs[index];
-        _formulaParams[_fractal, index] = Mathf.Clamp(_formulaParams[_fractal, index] + delta, spec.Min, spec.Max);
+        _formulaParams[fractalIndex, index] = Mathf.Clamp(_formulaParams[fractalIndex, index] + delta, spec.Min, spec.Max);
         ApplyFormulaParams();
         NotifyChanged();
     }
 
-    public void ResetCurrentFormulaParams()
+    public void ResetCurrentFormulaParams() => ResetFormulaParamsFor(_fractal);
+
+    public void ResetEditedFormulaParams() => ResetFormulaParamsFor(EditedFormulaFractalIndex);
+
+    private void ResetFormulaParamsFor(int fractalIndex)
     {
-        var specs = CurrentFormulaParams;
+        var specs = FractalSchema.Fractals[fractalIndex].Params;
         for (int i = 0; i < specs.Length; i++)
-            _formulaParams[_fractal, i] = specs[i].Default;
+            _formulaParams[fractalIndex, i] = specs[i].Default;
         ApplyFormulaParams();
         NotifyChanged();
     }
@@ -446,6 +493,8 @@ public partial class FractalController : MeshInstance3D
 
     public void ToggleAutoMorph() => AutoMorph = !AutoMorph;
 
+    public void ToggleAnimationPaused() => AnimationPaused = !AnimationPaused;
+
     public void Randomize()
     {
         _fractal = (int)(GD.Randi() % (uint)FractalNames.Length);
@@ -544,6 +593,7 @@ public partial class FractalController : MeshInstance3D
             case Key.Period: AdjustMorph(0.1f); break;
             case Key.Comma: AdjustMorph(-0.1f); break;
             case Key.Space: ToggleAutoMorph(); break;
+            case Key.K: ToggleAnimationPaused(); break;
             case Key.R: Randomize(); break;
         }
     }

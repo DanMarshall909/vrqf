@@ -37,6 +37,15 @@ public sealed record ActionItem(
     Func<string> ReadText,
     Action OnPressed) : IUiItem;
 
+public readonly record struct ButtonSpec(
+    string TooltipText,
+    Func<string> ReadText,
+    Action OnPressed,
+    bool ToggleMode = false,
+    Func<bool>? IsPressed = null);
+
+public sealed record ButtonRowItem(ButtonSpec[] Buttons) : IUiItem;
+
 public sealed record HeaderItem(Func<string> ReadText) : IUiItem;
 
 public sealed class FractalUiView
@@ -46,6 +55,7 @@ public sealed class FractalUiView
     private readonly VBoxContainer _paramsPage;
     private readonly List<(Action Update, bool IsDynamic)> _updaters = new();
     private int _builtFractalType = -1;
+    private bool _builtEditingTarget;
 
     public TabContainer Tabs { get; }
 
@@ -61,8 +71,11 @@ public sealed class FractalUiView
 
     public void RebuildDynamicTabIfNeeded()
     {
-        if (_builtFractalType == _fc.FractalTypeIndex) return;
-        _builtFractalType = _fc.FractalTypeIndex;
+        int editedFractal = _fc.EditedFormulaFractalIndex;
+        bool editingTarget = _fc.EditingMorphTarget;
+        if (_builtFractalType == editedFractal && _builtEditingTarget == editingTarget) return;
+        _builtFractalType = editedFractal;
+        _builtEditingTarget = editingTarget;
 
         _updaters.RemoveAll(u => u.IsDynamic);
         foreach (Node child in _paramsPage.GetChildren())
@@ -107,8 +120,17 @@ public static class FractalUiBuilder
         return view;
     }
 
+    private static ButtonRowItem BuildPlaybackRow(FractalController fc, bool useAutoMorphLabel) => new(new[]
+    {
+        useAutoMorphLabel
+            ? new ButtonSpec("Toggle automatic morphing", () => fc.AutoMorph ? "Auto morph: On" : "Auto morph: Off", () => fc.ToggleAutoMorph())
+            : new ButtonSpec("Pause or resume automatic morphing", () => fc.AutoMorph ? "Pause morph" : "Resume morph", () => fc.ToggleAutoMorph()),
+        new ButtonSpec("Pause or resume fractal shape animation", () => fc.AnimationPaused ? "Resume anim" : "Pause anim", () => fc.ToggleAnimationPaused()),
+    });
+
     private static IEnumerable<IUiItem> BuildMaterialItems(FractalController fc)
     {
+        yield return BuildPlaybackRow(fc, useAutoMorphLabel: false);
         yield return new SelectorItem("Style", "Material", "Previous material", "Next material",
             () => fc.MaterialName, d => fc.CycleMaterial(d));
         yield return new SelectorItem("Colour", "Colour", "Previous colour source", "Next colour source",
@@ -135,6 +157,7 @@ public static class FractalUiBuilder
 
     private static IEnumerable<IUiItem> BuildFractalItems(FractalController fc)
     {
+        yield return BuildPlaybackRow(fc, useAutoMorphLabel: false);
         yield return new SelectorItem("Type", "Fractal", "Previous fractal", "Next fractal",
             () => fc.FractalName, d => fc.CycleFractal(d));
         yield return new RangeItem("Detail", null, 2f, 64f, 1f, 1f, "0",
@@ -153,25 +176,32 @@ public static class FractalUiBuilder
 
     internal static IEnumerable<IUiItem> BuildParamsItems(FractalController fc)
     {
-        yield return new HeaderItem(() => fc.FractalName);
-        var specs = fc.CurrentFormulaParams;
+        yield return BuildPlaybackRow(fc, useAutoMorphLabel: false);
+        yield return new ButtonRowItem(new[]
+        {
+            new ButtonSpec("Edit source fractal (A) parameters", () => "A · Source",
+                () => fc.EditingMorphTarget = false, ToggleMode: true, IsPressed: () => !fc.EditingMorphTarget),
+            new ButtonSpec("Edit target fractal (B) parameters", () => "B · Target",
+                () => fc.EditingMorphTarget = true, ToggleMode: true, IsPressed: () => fc.EditingMorphTarget),
+        });
+        yield return new HeaderItem(() => $"{(fc.EditingMorphTarget ? "B" : "A")}: {fc.EditedFormulaFractalName}");
+
+        var specs = fc.EditedFormulaParams;
         for (int i = 0; i < specs.Length; i++)
         {
             int idx = i;
             var spec = specs[i];
             yield return new RangeItem(spec.Label, null, spec.Min, spec.Max,
                 spec.DesktopStep, spec.VrStep, spec.Format,
-                () => fc.GetFormulaParam(idx), d => fc.AdjustFormulaParam(idx, d));
+                () => fc.GetEditedFormulaParam(idx), d => fc.AdjustEditedFormulaParam(idx, d));
         }
         yield return new ActionItem("Reset current formula parameters to defaults", () => "Reset formula",
-            () => fc.ResetCurrentFormulaParams());
+            () => fc.ResetEditedFormulaParams());
     }
 
     private static IEnumerable<IUiItem> BuildMorphItems(FractalController fc, Main? main, bool includeArToggle)
     {
-        yield return new ActionItem("Toggle automatic morphing",
-            () => fc.AutoMorph ? "Auto morph: On" : "Auto morph: Off",
-            () => fc.ToggleAutoMorph());
+        yield return BuildPlaybackRow(fc, useAutoMorphLabel: true);
         yield return new SelectorItem("Target", "Target", "Previous morph target", "Next morph target",
             () => fc.MorphTargetName, d => fc.CycleMorphTarget(d));
         yield return new RangeItem("Morph amount", "Morph", 0f, 1f, 0.01f, 0.1f, "0.00",
@@ -205,7 +235,7 @@ public static class FractalUiBuilder
         }
 
         var page = new VBoxContainer { Name = title };
-        page.AddThemeConstantOverride("separation", 5);
+        page.AddThemeConstantOverride("separation", 4);
         tabs.AddChild(page);
         return page;
     }
@@ -226,6 +256,9 @@ public static class FractalUiBuilder
             case ActionItem act:
                 AddActionButton(parent, act, mode, view, isDynamic);
                 break;
+            case ButtonRowItem row:
+                AddButtonRow(parent, row, mode, view, isDynamic);
+                break;
             case HeaderItem hdr:
                 AddHeader(parent, hdr, mode, view, isDynamic);
                 break;
@@ -245,7 +278,7 @@ public static class FractalUiBuilder
             CustomMinimumSize = new Vector2(mode == UiMode.Desktop ? 55 : 74, 0),
         };
         if (mode == UiMode.VrWrist)
-            title.AddThemeFontSizeOverride("font_size", 18);
+            title.AddThemeFontSizeOverride("font_size", 17);
         row.AddChild(title);
 
         var prev = MakeCycleButton("<", sel.PrevTooltip, mode, () => sel.Cycle(-1));
@@ -259,7 +292,7 @@ public static class FractalUiBuilder
         };
         if (mode == UiMode.VrWrist)
         {
-            value.AddThemeFontSizeOverride("font_size", 16);
+            value.AddThemeFontSizeOverride("font_size", 15);
             value.AddThemeColorOverride("font_color", new Color(0.95f, 0.85f, 0.4f));
         }
         row.AddChild(value);
@@ -324,7 +357,7 @@ public static class FractalUiBuilder
             Text = labelText,
             SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
         };
-        label.AddThemeFontSizeOverride("font_size", 18);
+        label.AddThemeFontSizeOverride("font_size", 17);
         row.AddChild(label);
 
         var minus = MakeStepButton("-", $"Decrease {labelText.ToLowerInvariant()}", () => range.Adjust(-range.VrStep));
@@ -333,10 +366,10 @@ public static class FractalUiBuilder
         var value = new Label
         {
             Text = "-",
-            CustomMinimumSize = new Vector2(76, 0),
+            CustomMinimumSize = new Vector2(74, 0),
             HorizontalAlignment = HorizontalAlignment.Center,
         };
-        value.AddThemeFontSizeOverride("font_size", 16);
+        value.AddThemeFontSizeOverride("font_size", 15);
         value.AddThemeColorOverride("font_color", new Color(0.95f, 0.85f, 0.4f));
         row.AddChild(value);
 
@@ -361,14 +394,45 @@ public static class FractalUiBuilder
         {
             Text = act.ReadText(),
             TooltipText = act.TooltipText,
-            CustomMinimumSize = new Vector2(0, mode == UiMode.Desktop ? 32 : 44),
+            CustomMinimumSize = new Vector2(0, mode == UiMode.Desktop ? 32 : 38),
         };
         if (mode == UiMode.VrWrist)
-            btn.AddThemeFontSizeOverride("font_size", 19);
+            btn.AddThemeFontSizeOverride("font_size", 18);
         btn.Pressed += () => act.OnPressed();
         parent.AddChild(btn);
 
         view.RegisterUpdater(() => btn.Text = act.ReadText(), isDynamic);
+    }
+
+    private static void AddButtonRow(VBoxContainer parent, ButtonRowItem rowItem, UiMode mode, FractalUiView view, bool isDynamic)
+    {
+        var row = new HBoxContainer();
+        row.AddThemeConstantOverride("separation", 6);
+        parent.AddChild(row);
+
+        foreach (var spec in rowItem.Buttons)
+        {
+            var s = spec;
+            var btn = new Button
+            {
+                Text = s.ReadText(),
+                TooltipText = s.TooltipText,
+                ToggleMode = s.ToggleMode,
+                SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+                CustomMinimumSize = new Vector2(0, mode == UiMode.Desktop ? 30 : 36),
+            };
+            if (mode == UiMode.VrWrist)
+                btn.AddThemeFontSizeOverride("font_size", 17);
+            btn.Pressed += () => s.OnPressed();
+            row.AddChild(btn);
+
+            view.RegisterUpdater(() =>
+            {
+                btn.Text = s.ReadText();
+                if (s.ToggleMode && s.IsPressed is not null)
+                    btn.SetPressedNoSignal(s.IsPressed());
+            }, isDynamic);
+        }
     }
 
     private static void AddHeader(VBoxContainer parent, HeaderItem hdr, UiMode mode, FractalUiView view, bool isDynamic)
@@ -378,7 +442,7 @@ public static class FractalUiBuilder
             Text = hdr.ReadText(),
             HorizontalAlignment = HorizontalAlignment.Center,
         };
-        label.AddThemeFontSizeOverride("font_size", mode == UiMode.Desktop ? 15 : 18);
+        label.AddThemeFontSizeOverride("font_size", mode == UiMode.Desktop ? 15 : 17);
         label.AddThemeColorOverride("font_color", new Color(0.75f, 0.88f, 1f));
         parent.AddChild(label);
 
@@ -391,10 +455,10 @@ public static class FractalUiBuilder
         {
             Text = text,
             TooltipText = tooltip,
-            CustomMinimumSize = mode == UiMode.Desktop ? new Vector2(34, 32) : new Vector2(46, 42),
+            CustomMinimumSize = mode == UiMode.Desktop ? new Vector2(34, 32) : new Vector2(46, 40),
         };
         if (mode == UiMode.VrWrist)
-            b.AddThemeFontSizeOverride("font_size", 20);
+            b.AddThemeFontSizeOverride("font_size", 19);
         b.Pressed += () => onPressed();
         return b;
     }
@@ -405,9 +469,9 @@ public static class FractalUiBuilder
         {
             Text = text,
             TooltipText = tooltip,
-            CustomMinimumSize = new Vector2(46, 42),
+            CustomMinimumSize = new Vector2(46, 40),
         };
-        b.AddThemeFontSizeOverride("font_size", 20);
+        b.AddThemeFontSizeOverride("font_size", 19);
         b.Pressed += () => onPressed();
         return b;
     }

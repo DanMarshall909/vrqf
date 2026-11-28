@@ -38,6 +38,7 @@ uniform int max_steps = 96;
 uniform int iterations = 8;
 uniform float epsilon = 0.0012;
 uniform float morph_speed = 0.25;    // animation rate for ALL fractals (0 = frozen)
+uniform float anim_phase = 0.0;      // integrated animation phase (pausable)
 uniform float shape = 0.0;           // per-fractal shape parameter (scrubbed)
 uniform sampler2D palette_tex : source_color, hint_default_white;
 uniform sampler2D radial_hue_tex : source_color, hint_default_white;
@@ -580,8 +581,8 @@ void fragment() {
 	}
 	t_near = max(t_near, 0.0); // start at the camera if it is inside the volume
 
-	// Animation phase shared by every fractal (morph_speed scales it; 0 = frozen).
-	float anim = TIME * morph_speed;
+	// Animation phase shared by every fractal (driven by FractalController.anim_phase).
+	float anim = anim_phase;
 
 	// Sphere-trace through the proxy volume with distance-adaptive tolerance.
 	float t = t_near;
