@@ -149,7 +149,7 @@ The project uses object-space calculations so the fractal remains anchored corre
 
 ## Single-fractal mode
 
-The scene displays one interactive fractal. Its shader blends the current type's distance estimate with the next type's distance estimate over three seconds, then continues through the available types. You can choose a type, target, palette, material, and live parameters at any time.
+The scene displays one interactive fractal. Its shader holds on each form briefly before smoothly easing its distance estimate toward the next type, continuing through the available formulas. You can choose a type, target, palette, material, and live parameters at any time.
 
 ## Project structure
 

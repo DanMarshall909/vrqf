@@ -17,6 +17,7 @@ public partial class FractalController : MeshInstance3D
     [Export] public NodePath LeftControllerPath { get; set; } = "../XROrigin3D/LeftController";
     [Export] public NodePath RightControllerPath { get; set; } = "../XROrigin3D/RightController";
     [Export] public bool AutoMorph { get; set; } = true;
+    [Export] public float MorphHoldSeconds { get; set; } = 2.5f;
     [Export] public float MorphTransitionSeconds { get; set; } = 3f;
 
     public static readonly string[] FractalNames =
@@ -66,6 +67,8 @@ public partial class FractalController : MeshInstance3D
     private float _radialHueOffset;
     private int _morphTarget = 1;
     private float _morph;    // 0..1 blend toward _morphTarget
+    private float _morphLinear;
+    private float _morphHoldRemaining;
     private readonly float[] _roughnessByMaterial = { 1f, 0.35f, 0.08f, 0.02f, 1f, 1f, 1f };
     private readonly float[] _metallicByMaterial = { 0f, 0f, 1f, 0f, 0f, 0f, 0f };
     private readonly float[] _emissionByMaterial = { 1f, 0.05f, 0f, 0.25f, 1f, 1f, 1f };
@@ -99,7 +102,12 @@ public partial class FractalController : MeshInstance3D
         if (_quality < 16f) _quality = 96f;
         _morphTarget = ReadInt("morph_target");
         _morph = ReadFloat("morph");
+        _morphLinear = InverseSmoothstep01(Mathf.Clamp(_morph, 0f, 1f));
+        _morphHoldRemaining = _morph <= 0.001f ? Mathf.Max(MorphHoldSeconds, 0f) : 0f;
         ApplyMaterialParameters();
+
+        if (GetNodeOrNull<DirectionalLight3D>("../Sun") is DirectionalLight3D sun)
+            _material.SetShaderParameter("shadow_light_dir", sun.GlobalBasis.Z.Normalized());
 
         for (int i = 0; i < PalettePaths.Length; i++)
             _palettes[i] = GD.Load<Texture2D>(PalettePaths[i]);
@@ -144,16 +152,34 @@ public partial class FractalController : MeshInstance3D
 
         if (AutoMorph)
         {
-            _morph += (float)delta / Mathf.Max(MorphTransitionSeconds, 0.1f);
-            while (_morph >= 1f)
+            float dt = (float)delta;
+            if (_morphHoldRemaining > 0f)
             {
-                _morph -= 1f;
-                _fractal = _morphTarget;
-                _morphTarget = Wrap(_morphTarget + 1, FractalNames.Length);
-                _material.SetShaderParameter("fractal_type", _fractal);
-                _material.SetShaderParameter("morph_target", _morphTarget);
+                float used = Mathf.Min(_morphHoldRemaining, dt);
+                _morphHoldRemaining -= used;
+                dt -= used;
             }
-            _material.SetShaderParameter("morph", _morph);
+
+            if (dt > 0f && _morphHoldRemaining <= 0f)
+            {
+                _morphLinear += dt / Mathf.Max(MorphTransitionSeconds, 0.1f);
+                if (_morphLinear >= 1f)
+                {
+                    _fractal = _morphTarget;
+                    _morphTarget = Wrap(_morphTarget + 1, FractalNames.Length);
+                    _morphLinear = 0f;
+                    _morph = 0f;
+                    _morphHoldRemaining = Mathf.Max(MorphHoldSeconds, 0f);
+                    _material.SetShaderParameter("fractal_type", _fractal);
+                    _material.SetShaderParameter("morph_target", _morphTarget);
+                    _material.SetShaderParameter("morph", _morph);
+                }
+                else
+                {
+                    _morph = Smoothstep01(_morphLinear);
+                    _material.SetShaderParameter("morph", _morph);
+                }
+            }
         }
 
         float input = Mathf.Clamp(TriggerInput() + KeyboardScrub(), -1f, 1f);
@@ -195,6 +221,8 @@ public partial class FractalController : MeshInstance3D
             _morphTarget = Wrap(_fractal + 1, FractalNames.Length);
             _material?.SetShaderParameter("morph_target", _morphTarget);
         }
+        if (_morph <= 0.001f)
+            _morphHoldRemaining = Mathf.Max(MorphHoldSeconds, 0f);
         _material?.SetShaderParameter("fractal_type", _fractal);
     }
 
@@ -303,7 +331,9 @@ public partial class FractalController : MeshInstance3D
     public void AdjustMorph(float delta)
     {
         AutoMorph = false;
+        _morphHoldRemaining = 0f;
         _morph = Mathf.Clamp(_morph + delta, 0f, 1f);
+        _morphLinear = InverseSmoothstep01(_morph);
         _material?.SetShaderParameter("morph", _morph);
     }
 
@@ -320,6 +350,8 @@ public partial class FractalController : MeshInstance3D
         _morphTarget = Wrap(_fractal + 1 + (int)(GD.Randi() % (uint)(FractalNames.Length - 1)), FractalNames.Length);
         _shapePhase = (float)GD.RandRange(-3.0, 3.0);
         _morph = (float)GD.RandRange(0.0, 0.6);
+        _morphLinear = InverseSmoothstep01(_morph);
+        _morphHoldRemaining = _morph <= 0.001f ? Mathf.Max(MorphHoldSeconds, 0f) : 0f;
         _morphSpeed = (float)GD.RandRange(0.0, 0.6);
         _iterations = Mathf.RoundToInt((float)GD.RandRange(6.0, 16.0));
         _zoom = (float)GD.RandRange(0.85, 1.25);
@@ -391,4 +423,16 @@ public partial class FractalController : MeshInstance3D
     }
 
     private static int Wrap(int value, int count) => (value % count + count) % count;
+
+    private static float Smoothstep01(float u)
+    {
+        u = Mathf.Clamp(u, 0f, 1f);
+        return u * u * (3f - 2f * u);
+    }
+
+    private static float InverseSmoothstep01(float y)
+    {
+        y = Mathf.Clamp(y, 0f, 1f);
+        return 0.5f - Mathf.Sin(Mathf.Asin(Mathf.Clamp(1f - 2f * y, -1f, 1f)) / 3f);
+    }
 }
