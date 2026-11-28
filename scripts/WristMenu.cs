@@ -75,7 +75,7 @@ public partial class WristMenu : Node3D
         var margin = new MarginContainer();
         margin.SetAnchorsPreset(Control.LayoutPreset.FullRect);
         foreach (var side in new[] { "margin_left", "margin_top", "margin_right", "margin_bottom" })
-            margin.AddThemeConstantOverride(side, 10);
+            margin.AddThemeConstantOverride(side, 8);
         _vp.AddChild(margin);
 
         var tabs = new TabContainer { Name = "WristTabs" };

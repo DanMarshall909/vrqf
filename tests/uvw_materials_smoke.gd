@@ -19,6 +19,8 @@ func _run() -> void:
 	var active: MeshInstance3D = get_first_node_in_group("fractal_controller")
 	var material: ShaderMaterial = active.get_surface_override_material(0)
 	active.set("AutoMorph", false)
+	active.set("AnimationPaused", true)
+	material.set_shader_parameter("anim_phase", 0.0)
 	var hud := scene.get_node_or_null("HUD") as CanvasLayer
 	if hud != null:
 		hud.visible = false

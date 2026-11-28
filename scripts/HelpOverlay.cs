@@ -19,6 +19,7 @@ public partial class HelpOverlay : CanvasLayer
         "Morph target   wrist menu                 (M)\n" +
         "Morph amount   wrist menu · pauses auto   (, / .)\n" +
         "Auto morph     wrist-menu button          (Space)\n" +
+        "Pause anim     panel / wrist button       (K)\n" +
         "Randomize      wrist-menu button          (R)\n" +
         "AR / VR        wrist-menu button          (V)\n" +
         "Help           menu button                (?)";

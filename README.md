@@ -72,11 +72,11 @@ It is not intended to be a polished product. It is a technical and visual experi
 
 ## Controls
 
-The project supports desktop controls and VR controller input. Both the desktop panel (upper-right) and the VR wrist menu share the same four tabs:
+The project supports desktop controls and VR controller input. Both the desktop panel (upper-right) and the VR wrist menu share the same four tabs, each with quick **Pause morph** / **Pause anim** playback buttons at the top:
 
 * **Material**: style (including Glow, Plastic, Metal, Glass, Matcaps, and 3D object-space UVW materials: `UVW RGB`, `UVW Marble`, `UVW Grid`, `UVW Contours`, `UVW Opal`, `UVW Voronoi`), colour source, palette, hue cycles (spatial frequency for radial hue & UVW styles), hue offset, roughness, metalness, emission, ambient occlusion (`AO`), and soft self-shadows (`Shadows`). Roughness and metalness apply to Plastic, Metal, Glass, and all UVW materials; edits are remembered per material style.
 * **Fractal**: active fractal type, detail, shape, animation speed, size, quality, and a **Randomize** button.
-* **Params**: context-sensitive mathematical parameters for the active fractal (for example, Quaternion Julia `C` components and 4D `w` slice, Mandelbulb/Burning Ship/Tricorn `Power` and angles, Mandelbox `Scale`/`Box fold`/`Min radius`, KIFS angles, Gyroid/Schwarz P frequency and thickness), remembered per fractal type with a **Reset formula** button.
+* **Params**: switch between **A · Source** and **B · Target** to edit context-sensitive mathematical parameters for either fractal in the morph pair (for example, Quaternion Julia `C` components and 4D `w` slice, Mandelbulb/Burning Ship/Tricorn `Power` and angles, Mandelbox `Scale`/`Box fold`/`Min radius`, KIFS angles, Gyroid/Schwarz P frequency and thickness), remembered per fractal type with a **Reset formula** button.
 * **Morph**: automatic morphing toggle, morph target, manual morph amount, dwell **Hold (s)**, **Transition (s)**, and (in VR) the **AR / VR** toggle.
 
 **Radial hue** is the default colour source. The shader samples [a rainbow gradient texture](textures/palette_radial_hue.tres) using each surface point's distance from the fractal centre. Hue cycles controls how often the gradient repeats from centre to edge; hue offset rotates the colours. Choose a palette with the palette arrows or `P` to use the existing orbit colouring; choose Radial hue again with the Colour selector or `C`.
@@ -116,6 +116,7 @@ Aim the right controller at the left wrist menu and pull the trigger to use its 
 | Increase morph amount       | `.` |
 | Decrease morph amount       | `,` |
 | Toggle automatic morphing   | `Space` |
+| Pause / resume animation    | `K` |
 | Randomise                   | `R` |
 
 The fractal cycles through types automatically. Adjusting the morph amount manually pauses the cycle; press `Space` or the Auto morph button in either panel to resume it.
