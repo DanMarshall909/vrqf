@@ -60,7 +60,7 @@ func _run() -> void:
 		root.get_texture().get_image().save_png(capture_dir.path_join("glow_radial_hue.png"))
 
 	# AO + soft shadow visual check on Plastic Mandelbulb.
-	material.set_shader_parameter("fractal_type", 1)
+	active.call("CycleFractal", 1)
 	material.set_shader_parameter("material_mode", 1)
 	material.set_shader_parameter("material_roughness", 0.35)
 	material.set_shader_parameter("material_metallic", 0.0)
@@ -101,7 +101,7 @@ func _run() -> void:
 	material.set_shader_parameter("shadow_strength", shadow_val)
 
 	if not capture_dir.is_empty():
-		material.set_shader_parameter("fractal_type", 6)
+		active.call("CycleFractal", 5)
 		material.set_shader_parameter("material_mode", 2)
 		material.set_shader_parameter("material_roughness", 0.08)
 		material.set_shader_parameter("material_metallic", 1.0)
@@ -117,8 +117,9 @@ func _run() -> void:
 	material.set_shader_parameter("material_emission", 0.1)
 	material.set_shader_parameter("morph", 0.0)
 	material.set_shader_parameter("iterations", 64)
-	for ftype in 16:
-		material.set_shader_parameter("fractal_type", ftype)
+	for _i in 16:
+		active.call("CycleFractal", 1)
+		var ftype: int = material.get_shader_parameter("fractal_type")
 		await _render_frames(2)
 		var stats := _measure_crop(root.get_texture().get_image())
 		if not stats["finite"] or stats["non_flat_count"] < 100:
@@ -128,8 +129,10 @@ func _run() -> void:
 	print("PASS: all 16 fractal types render finite non-empty pixels at iterations=64")
 
 	# Verify cross-scale morph (Apollonian -> Mandelbox) stays framed and finite.
-	material.set_shader_parameter("fractal_type", 9)
-	material.set_shader_parameter("morph_target", 6)
+	while int(material.get_shader_parameter("fractal_type")) != 9:
+		active.call("CycleFractal", 1)
+	while int(material.get_shader_parameter("morph_target")) != 6:
+		active.call("CycleMorphTarget", 1)
 	material.set_shader_parameter("morph", 0.5)
 	material.set_shader_parameter("iterations", 10)
 	await _render_frames(2)
@@ -139,6 +142,30 @@ func _run() -> void:
 		quit(1)
 		return
 	print("PASS: cross-scale Apollonian->Mandelbox morph renders finite framed pixels")
+
+	# Verify 4D Julia slice and negative-scale Mandelbox render cleanly.
+	while int(material.get_shader_parameter("fractal_type")) != 0:
+		active.call("CycleFractal", 1)
+	material.set_shader_parameter("morph", 0.0)
+	material.set_shader_parameter("fractal_params_a", Vector4(0.4, -0.2, 0.3, 0.1))
+	material.set_shader_parameter("fractal_param4_a", 0.35)
+	await _render_frames(2)
+	var slice_stats := _measure_crop(root.get_texture().get_image())
+	if not slice_stats["finite"] or slice_stats["non_flat_count"] < 100:
+		push_error("4D Julia slice render failed sanity check: %s" % [slice_stats])
+		quit(1)
+		return
+
+	while int(material.get_shader_parameter("fractal_type")) != 6:
+		active.call("CycleFractal", 1)
+	material.set_shader_parameter("fractal_params_a", Vector4(-2.0, 1.0, 0.5, 0.0))
+	await _render_frames(2)
+	var neg_box_stats := _measure_crop(root.get_texture().get_image())
+	if not neg_box_stats["finite"] or neg_box_stats["non_flat_count"] < 100:
+		push_error("Negative-scale Mandelbox render failed sanity check: %s" % [neg_box_stats])
+		quit(1)
+		return
+	print("PASS: 4D Julia slice and negative-scale Mandelbox render finite non-empty pixels")
 	quit(0)
 
 

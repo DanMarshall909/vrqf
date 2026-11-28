@@ -1,4 +1,5 @@
 using Godot;
+using System;
 
 namespace Vrqf;
 
@@ -16,18 +17,53 @@ public partial class FractalController : MeshInstance3D
 {
     [Export] public NodePath LeftControllerPath { get; set; } = "../XROrigin3D/LeftController";
     [Export] public NodePath RightControllerPath { get; set; } = "../XROrigin3D/RightController";
-    [Export] public bool AutoMorph { get; set; } = true;
-    [Export] public float MorphHoldSeconds { get; set; } = 2.5f;
-    [Export] public float MorphTransitionSeconds { get; set; } = 3f;
+    private bool _autoMorph = true;
+    private float _morphHoldSeconds = 2.5f;
+    private float _morphTransitionSeconds = 3f;
 
-    public static readonly string[] FractalNames =
+    [Export]
+    public bool AutoMorph
     {
-        "Quaternion Julia", "Mandelbulb", "Quaternion Mandelbrot",
-        "Menger Sponge", "Sierpinski Tetrahedron", "Burning Ship",
-        "Mandelbox", "Tricorn", "Nova",
-        "Apollonian", "Kaleidoscopic IFS", "Octahedral IFS",
-        "Gyroid", "Schwarz P", "Mandelbulb P3", "Cubic Julia",
-    };
+        get => _autoMorph;
+        set
+        {
+            if (_autoMorph == value) return;
+            _autoMorph = value;
+            NotifyChanged();
+        }
+    }
+
+    [Export]
+    public float MorphHoldSeconds
+    {
+        get => _morphHoldSeconds;
+        set
+        {
+            float clamped = Mathf.Clamp(value, 0f, 10f);
+            if (Mathf.IsEqualApprox(_morphHoldSeconds, clamped)) return;
+            _morphHoldSeconds = clamped;
+            if (_morphHoldRemaining > _morphHoldSeconds)
+                _morphHoldRemaining = _morphHoldSeconds;
+            NotifyChanged();
+        }
+    }
+
+    [Export]
+    public float MorphTransitionSeconds
+    {
+        get => _morphTransitionSeconds;
+        set
+        {
+            float clamped = Mathf.Clamp(value, 0.2f, 10f);
+            if (Mathf.IsEqualApprox(_morphTransitionSeconds, clamped)) return;
+            _morphTransitionSeconds = clamped;
+            NotifyChanged();
+        }
+    }
+
+    public static string[] FractalNames => FractalSchema.FractalNames;
+
+    public event Action? StateChanged;
 
     public static readonly string[] MaterialNames =
     {
@@ -65,10 +101,13 @@ public partial class FractalController : MeshInstance3D
     private float _quality;  // max_steps
     private float _radialHueCycles;
     private float _radialHueOffset;
+    private float _aoStrength = 0.75f;
+    private float _shadowStrength = 0.65f;
     private int _morphTarget = 1;
     private float _morph;    // 0..1 blend toward _morphTarget
     private float _morphLinear;
     private float _morphHoldRemaining;
+    private readonly float[,] _formulaParams = new float[FractalSchema.Fractals.Length, FractalSchema.MaxFormulaParams];
     private readonly float[] _roughnessByMaterial = { 1f, 0.35f, 0.08f, 0.02f, 1f, 1f, 1f };
     private readonly float[] _metallicByMaterial = { 0f, 0f, 1f, 0f, 0f, 0f, 0f };
     private readonly float[] _emissionByMaterial = { 1f, 0.05f, 0f, 0.25f, 1f, 1f, 1f };
@@ -102,8 +141,12 @@ public partial class FractalController : MeshInstance3D
         if (_quality < 16f) _quality = 96f;
         _morphTarget = ReadInt("morph_target");
         _morph = ReadFloat("morph");
+        _aoStrength = ReadFloat("ao_strength");
+        _shadowStrength = ReadFloat("shadow_strength");
         _morphLinear = InverseSmoothstep01(Mathf.Clamp(_morph, 0f, 1f));
         _morphHoldRemaining = _morph <= 0.001f ? Mathf.Max(MorphHoldSeconds, 0f) : 0f;
+        InitFormulaParamDefaults();
+        ApplyFormulaParams();
         ApplyMaterialParameters();
 
         if (GetNodeOrNull<DirectionalLight3D>("../Sun") is DirectionalLight3D sun)
@@ -120,7 +163,9 @@ public partial class FractalController : MeshInstance3D
         GD.Print($"Fractal: {FractalName} | Material: {MaterialName} | Colour: {ColorModeName}");
     }
 
-    // ----- Display accessors (used by the WristMenu labels).
+    // ----- Display accessors (used by the desktop and VR UIs).
+    public int FractalTypeIndex => _fractal;
+    public FormulaParamSpec[] CurrentFormulaParams => FractalSchema.Fractals[_fractal].Params;
     public string FractalName => FractalNames[_fractal];
     public string MaterialName => MaterialNames[_materialMode];
     public string PaletteName => PaletteNames[_palette];
@@ -144,7 +189,10 @@ public partial class FractalController : MeshInstance3D
     public float MaterialEmissionValue => _emissionByMaterial[_materialMode];
     public float RadialHueCyclesValue => _radialHueCycles;
     public float RadialHueOffsetValue => _radialHueOffset;
+    public float AoStrengthValue => _aoStrength;
+    public float ShadowStrengthValue => _shadowStrength;
     public bool MaterialSupportsSurfaceParams => _materialMode is 1 or 2 or 3;
+    public float GetFormulaParam(int index) => _formulaParams[_fractal, index];
 
     public override void _Process(double delta)
     {
@@ -173,11 +221,14 @@ public partial class FractalController : MeshInstance3D
                     _material.SetShaderParameter("fractal_type", _fractal);
                     _material.SetShaderParameter("morph_target", _morphTarget);
                     _material.SetShaderParameter("morph", _morph);
+                    ApplyFormulaParams();
+                    NotifyChanged();
                 }
                 else
                 {
                     _morph = Smoothstep01(_morphLinear);
                     _material.SetShaderParameter("morph", _morph);
+                    NotifyChanged();
                 }
             }
         }
@@ -212,7 +263,7 @@ public partial class FractalController : MeshInstance3D
         return k;
     }
 
-    // ----- Public mutators (controllers + WristMenu both call these).
+    // ----- Public mutators (controllers, ExplorerPanel & WristMenu all call these).
     public void CycleFractal(int direction)
     {
         _fractal = Wrap(_fractal + direction, FractalNames.Length);
@@ -224,6 +275,8 @@ public partial class FractalController : MeshInstance3D
         if (_morph <= 0.001f)
             _morphHoldRemaining = Mathf.Max(MorphHoldSeconds, 0f);
         _material?.SetShaderParameter("fractal_type", _fractal);
+        ApplyFormulaParams();
+        NotifyChanged();
     }
 
     public void CycleMaterial(int direction)
@@ -231,24 +284,65 @@ public partial class FractalController : MeshInstance3D
         _materialMode = Wrap(_materialMode + direction, MaterialNames.Length);
         _material?.SetShaderParameter("material_mode", _materialMode);
         ApplyMaterialParameters();
+        NotifyChanged();
     }
 
     public void AdjustMaterialRoughness(float delta)
     {
         _roughnessByMaterial[_materialMode] = Mathf.Clamp(MaterialRoughnessValue + delta, 0f, 1f);
         _material?.SetShaderParameter("material_roughness", MaterialRoughnessValue);
+        NotifyChanged();
     }
 
     public void AdjustMaterialMetallic(float delta)
     {
         _metallicByMaterial[_materialMode] = Mathf.Clamp(MaterialMetallicValue + delta, 0f, 1f);
         _material?.SetShaderParameter("material_metallic", MaterialMetallicValue);
+        NotifyChanged();
     }
 
     public void AdjustMaterialEmission(float delta)
     {
         _emissionByMaterial[_materialMode] = Mathf.Clamp(MaterialEmissionValue + delta, 0f, 2f);
         _material?.SetShaderParameter("material_emission", MaterialEmissionValue);
+        NotifyChanged();
+    }
+
+    public void AdjustAoStrength(float delta)
+    {
+        _aoStrength = Mathf.Clamp(_aoStrength + delta, 0f, 1f);
+        _material?.SetShaderParameter("ao_strength", _aoStrength);
+        NotifyChanged();
+    }
+
+    public void AdjustShadowStrength(float delta)
+    {
+        _shadowStrength = Mathf.Clamp(_shadowStrength + delta, 0f, 1f);
+        _material?.SetShaderParameter("shadow_strength", _shadowStrength);
+        NotifyChanged();
+    }
+
+    public void AdjustMorphHoldSeconds(float delta) => MorphHoldSeconds += delta;
+
+    public void AdjustMorphTransitionSeconds(float delta) => MorphTransitionSeconds += delta;
+
+    public void AdjustFormulaParam(int index, float delta)
+    {
+        var specs = CurrentFormulaParams;
+        if ((uint)index >= (uint)specs.Length) return;
+        var spec = specs[index];
+        _formulaParams[_fractal, index] = Mathf.Clamp(_formulaParams[_fractal, index] + delta, spec.Min, spec.Max);
+        ApplyFormulaParams();
+        NotifyChanged();
+    }
+
+    public void ResetCurrentFormulaParams()
+    {
+        var specs = CurrentFormulaParams;
+        for (int i = 0; i < specs.Length; i++)
+            _formulaParams[_fractal, i] = specs[i].Default;
+        ApplyFormulaParams();
+        NotifyChanged();
     }
 
     private void ApplyMaterialParameters()
@@ -285,39 +379,48 @@ public partial class FractalController : MeshInstance3D
     {
         _colorMode = mode;
         _material?.SetShaderParameter("color_mode", _colorMode);
+        NotifyChanged();
     }
 
-    public void CycleLiveParam(int direction) =>
+    public void CycleLiveParam(int direction)
+    {
         _liveParam = Wrap(_liveParam + direction, LiveParamNames.Length);
+        NotifyChanged();
+    }
 
     public void AdjustDetail(float delta)
     {
         _iterations = Mathf.Clamp(_iterations + delta, 2f, 64f);
         _material?.SetShaderParameter("iterations", Mathf.RoundToInt(_iterations));
+        NotifyChanged();
     }
 
     public void AdjustShape(float delta)
     {
         _shapePhase += delta;
         _material?.SetShaderParameter("shape", _shapePhase);
+        NotifyChanged();
     }
 
     public void AdjustSpeed(float delta)
     {
         _morphSpeed = Mathf.Clamp(_morphSpeed + delta, 0f, 2f);
         _material?.SetShaderParameter("morph_speed", _morphSpeed);
+        NotifyChanged();
     }
 
     public void AdjustZoom(float delta)
     {
         _zoom = Mathf.Clamp(_zoom + delta, 0.3f, 3f);
         _material?.SetShaderParameter("fractal_extent", _zoom);
+        NotifyChanged();
     }
 
     public void AdjustQuality(float delta)
     {
         _quality = Mathf.Clamp(_quality + delta, 16f, 256f);
         _material?.SetShaderParameter("max_steps", Mathf.RoundToInt(_quality));
+        NotifyChanged();
     }
 
     public void CycleMorphTarget(int direction)
@@ -326,15 +429,18 @@ public partial class FractalController : MeshInstance3D
         if (_morphTarget == _fractal)
             _morphTarget = Wrap(_morphTarget + (direction < 0 ? -1 : 1), FractalNames.Length);
         _material?.SetShaderParameter("morph_target", _morphTarget);
+        ApplyFormulaParams();
+        NotifyChanged();
     }
 
     public void AdjustMorph(float delta)
     {
-        AutoMorph = false;
+        _autoMorph = false;
         _morphHoldRemaining = 0f;
         _morph = Mathf.Clamp(_morph + delta, 0f, 1f);
         _morphLinear = InverseSmoothstep01(_morph);
         _material?.SetShaderParameter("morph", _morph);
+        NotifyChanged();
     }
 
     public void ToggleAutoMorph() => AutoMorph = !AutoMorph;
@@ -356,6 +462,7 @@ public partial class FractalController : MeshInstance3D
         _iterations = Mathf.RoundToInt((float)GD.RandRange(6.0, 16.0));
         _zoom = (float)GD.RandRange(0.85, 1.25);
         ApplyAll();
+        NotifyChanged();
     }
 
     private void ApplyAll()
@@ -368,13 +475,43 @@ public partial class FractalController : MeshInstance3D
         _material.SetShaderParameter("color_mode", _colorMode);
         _material.SetShaderParameter("radial_hue_cycles", _radialHueCycles);
         _material.SetShaderParameter("radial_hue_offset", _radialHueOffset);
+        _material.SetShaderParameter("ao_strength", _aoStrength);
+        _material.SetShaderParameter("shadow_strength", _shadowStrength);
         _material.SetShaderParameter("morph_target", _morphTarget);
         _material.SetShaderParameter("morph", _morph);
         _material.SetShaderParameter("shape", _shapePhase);
         _material.SetShaderParameter("morph_speed", _morphSpeed);
         _material.SetShaderParameter("iterations", Mathf.RoundToInt(_iterations));
         _material.SetShaderParameter("fractal_extent", _zoom);
+        ApplyFormulaParams();
     }
+
+    private void InitFormulaParamDefaults()
+    {
+        for (int f = 0; f < FractalSchema.Fractals.Length; f++)
+        {
+            var specs = FractalSchema.Fractals[f].Params;
+            for (int p = 0; p < specs.Length; p++)
+                _formulaParams[f, p] = specs[p].Default;
+        }
+    }
+
+    private void ApplyFormulaParams()
+    {
+        if (_material is null) return;
+        _material.SetShaderParameter("fractal_params_a", PackFormulaVec(_fractal));
+        _material.SetShaderParameter("fractal_param4_a", _formulaParams[_fractal, 4]);
+        _material.SetShaderParameter("fractal_params_b", PackFormulaVec(_morphTarget));
+        _material.SetShaderParameter("fractal_param4_b", _formulaParams[_morphTarget, 4]);
+    }
+
+    private Vector4 PackFormulaVec(int fractalIndex) => new(
+        _formulaParams[fractalIndex, 0],
+        _formulaParams[fractalIndex, 1],
+        _formulaParams[fractalIndex, 2],
+        _formulaParams[fractalIndex, 3]);
+
+    private void NotifyChanged() => StateChanged?.Invoke();
 
     private void OnButtonPressed(string name, bool isLeft)
     {
