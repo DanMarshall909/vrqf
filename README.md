@@ -97,7 +97,7 @@ The project supports desktop controls and VR controller input. Both the desktop 
 | Adjust live parameter | Triggers          |
 | Toggle auto morph     | Wrist menu button |
 
-The wrist menu has **Fractal**, **Morph**, and **Material** tabs. The Material tab includes colour source, hue, roughness, metalness, and emission controls.
+Aim the right controller at the left wrist menu and pull the trigger to use its **Material**, **Fractal**, **Params**, and **Morph** tabs (including the **AR / VR** toggle on the **Morph** tab).
 
 ### Keyboard controls
 
