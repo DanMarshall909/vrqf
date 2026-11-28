@@ -72,7 +72,12 @@ It is not intended to be a polished product. It is a technical and visual experi
 
 ## Controls
 
-The project supports desktop controls and VR controller input. On desktop, use the panel in the upper-right corner. Its **Material** tab selects a style and colour source and adjusts hue cycles, hue offset, roughness, metalness, and emission. Its **Fractal** tab selects the current type and morph target, pauses or resumes automatic morphing, and adjusts morph amount, detail, shape, animation speed, size, and quality. Material edits are remembered when you switch styles. Roughness and metalness apply to Plastic, Metal, and Glass; emission applies to every style.
+The project supports desktop controls and VR controller input. Both the desktop panel (upper-right) and the VR wrist menu share the same four tabs:
+
+* **Material**: style, colour source, palette, hue cycles, hue offset, roughness, metalness, emission, ambient occlusion (`AO`), and soft self-shadows (`Shadows`). Roughness and metalness apply to Plastic, Metal, and Glass; edits are remembered per material style.
+* **Fractal**: active fractal type, detail, shape, animation speed, size, quality, and a **Randomize** button.
+* **Params**: context-sensitive mathematical parameters for the active fractal (for example, Quaternion Julia `C` components and 4D `w` slice, Mandelbulb/Burning Ship/Tricorn `Power` and angles, Mandelbox `Scale`/`Box fold`/`Min radius`, KIFS angles, Gyroid/Schwarz P frequency and thickness), remembered per fractal type with a **Reset formula** button.
+* **Morph**: automatic morphing toggle, morph target, manual morph amount, dwell **Hold (s)**, **Transition (s)**, and (in VR) the **AR / VR** toggle.
 
 **Radial hue** is the default colour source. The shader samples [a rainbow gradient texture](textures/palette_radial_hue.tres) using each surface point's distance from the fractal centre. Hue cycles controls how often the gradient repeats from centre to edge; hue offset rotates the colours. Choose a palette with the palette arrows or `P` to use the existing orbit colouring; choose Radial hue again with the Colour selector or `C`.
 
@@ -92,7 +97,7 @@ The project supports desktop controls and VR controller input. On desktop, use t
 | Adjust live parameter | Triggers          |
 | Toggle auto morph     | Wrist menu button |
 
-The wrist menu has **Fractal**, **Morph**, and **Material** tabs. The Material tab includes colour source, hue, roughness, metalness, and emission controls.
+Aim the right controller at the left wrist menu and pull the trigger to use its **Material**, **Fractal**, **Params**, and **Morph** tabs (including the **AR / VR** toggle on the **Morph** tab).
 
 ### Keyboard controls
 

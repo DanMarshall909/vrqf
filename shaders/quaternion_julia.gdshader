@@ -48,6 +48,10 @@ uniform float boundary_eps = 0.003;  // trim hits on the box shell (kills edge l
 uniform float ao_strength : hint_range(0.0, 1.0) = 0.75;
 uniform float shadow_strength : hint_range(0.0, 1.0) = 0.65;
 uniform vec3 shadow_light_dir = vec3(0.353553, 0.707107, 0.612372);
+uniform vec4 fractal_params_a = vec4(0.5, 0.0, 0.5, 0.0);
+uniform float fractal_param4_a = 0.0;
+uniform vec4 fractal_params_b = vec4(8.0, 0.0, 0.0, 0.0);
+uniform float fractal_param4_b = 0.0;
 
 varying vec3 v_frag_local;  // this fragment's position in object space
 varying vec3 v_inv_m0;
@@ -72,8 +76,8 @@ vec2 rot2(vec2 v, float a) {
 
 // ----- Distance estimators. Each returns DE and a 0..1 colour factor (trap).
 
-float qjulia_de(vec3 pos, vec4 c, out float trap) {
-	vec4 z = vec4(pos, 0.0);
+float qjulia_de(vec3 pos, vec4 c, float slice_w, out float trap) {
+	vec4 z = vec4(pos, slice_w);
 	float dz2 = 1.0; // squared magnitude of the running derivative
 	float m2 = dot(z, z);
 	float orbit = 1e9;
@@ -89,8 +93,8 @@ float qjulia_de(vec3 pos, vec4 c, out float trap) {
 	return 0.25 * r * log(max(r, 1.0001)) / sqrt(max(dz2, 1e-12));
 }
 
-float qmandel_de(vec3 pos, vec4 c_offset, out float trap) {
-	vec4 c = vec4(pos, 0.0) + c_offset;
+float qmandel_de(vec3 pos, vec4 c_offset, float slice_w, out float trap) {
+	vec4 c = vec4(pos, slice_w) + c_offset;
 	vec4 z = vec4(0.0);
 	float dr = 1.0;
 	float m2 = 0.0;
@@ -107,7 +111,7 @@ float qmandel_de(vec3 pos, vec4 c_offset, out float trap) {
 	return 0.5 * r * log(max(r, 1.0001)) / max(dr, 1e-6);
 }
 
-float mandelbulb_de(vec3 pos, float power, out float trap) {
+float mandelbulb_de(vec3 pos, float power, float phase_theta, float phase_phi, out float trap) {
 	vec3 z = pos;
 	float dr = 1.0;
 	float r = 0.0;
@@ -120,8 +124,8 @@ float mandelbulb_de(vec3 pos, float power, out float trap) {
 		float phi = (abs(z.x) + abs(z.y) > 1e-6) ? atan(z.y, z.x) : 0.0;
 		dr = pow(safe_r, power - 1.0) * power * dr + 1.0;
 		float zr = pow(safe_r, power);
-		theta *= power;
-		phi *= power;
+		theta = theta * power + phase_theta;
+		phi = phi * power + phase_phi;
 		z = zr * vec3(sin(theta) * cos(phi), sin(theta) * sin(phi), cos(theta)) + pos;
 		orbit = min(orbit, r);
 	}
@@ -129,7 +133,7 @@ float mandelbulb_de(vec3 pos, float power, out float trap) {
 	return 0.5 * log(max(r, 1.0001)) * r / max(dr, 1e-6);
 }
 
-float burningship_de(vec3 pos, float power, out float trap) {
+float burningship_de(vec3 pos, float power, float phase_theta, float phase_phi, out float trap) {
 	vec3 z = pos;
 	float dr = 1.0;
 	float r = 0.0;
@@ -143,8 +147,8 @@ float burningship_de(vec3 pos, float power, out float trap) {
 		float phi = (abs(z.x) + abs(z.y) > 1e-6) ? atan(z.y, z.x) : 0.0;
 		dr = pow(safe_r, power - 1.0) * power * dr + 1.0;
 		float zr = pow(safe_r, power);
-		theta *= power;
-		phi *= power;
+		theta = theta * power + phase_theta;
+		phi = phi * power + phase_phi;
 		z = zr * vec3(sin(theta) * cos(phi), sin(theta) * sin(phi), cos(theta)) + pos;
 		orbit = min(orbit, r);
 	}
@@ -157,14 +161,15 @@ float box_de(vec3 p, vec3 b) {
 	return length(max(d, 0.0)) + min(max(d.x, max(d.y, d.z)), 0.0);
 }
 
-float menger_de(vec3 p, float ratio, out float trap) {
+float menger_de(vec3 p, float ratio, float twist, float hole_size, out float trap) {
+	if (abs(twist) > 1e-4) p.xz = rot2(p.xz, twist * p.y);
 	float d = box_de(p, vec3(1.0));
 	float s = 1.0;
 	int iters = min(iterations, 10);
 	for (int i = 0; i < iters; i++) {
 		vec3 a = mod(p * s, 2.0) - 1.0;
 		s *= ratio;
-		vec3 r = abs(1.0 - ratio * abs(a));
+		vec3 r = abs(hole_size - ratio * abs(a));
 		float da = max(r.x, r.y);
 		float db = max(r.y, r.z);
 		float dc = max(r.z, r.x);
@@ -175,36 +180,39 @@ float menger_de(vec3 p, float ratio, out float trap) {
 	return d;
 }
 
-float sierpinski_de(vec3 z, float scale, out float trap) {
+float sierpinski_de(vec3 z, float scale, float offset, float rot, out float trap) {
 	int iters = min(iterations, 20);
 	for (int i = 0; i < iters; i++) {
+		if (abs(rot) > 1e-4) z.xz = rot2(z.xz, rot);
 		if (z.x + z.y < 0.0) z.xy = -z.yx;
 		if (z.x + z.z < 0.0) z.xz = -z.zx;
 		if (z.y + z.z < 0.0) z.zy = -z.yz;
-		z = z * scale - vec3(1.0) * (scale - 1.0);
+		z = z * scale - vec3(offset) * (scale - 1.0);
 	}
 	trap = clamp(length(z) * 0.25, 0.0, 1.0);
 	return length(z) * pow(scale, -float(iters));
 }
 
-float mandelbox_de(vec3 pos, float box_scale, out float trap) {
+float mandelbox_de(vec3 pos, float box_scale, float box_fold, float min_r, out float trap) {
+	float s = (abs(box_scale) < 0.5) ? (box_scale < 0.0 ? -0.5 : 0.5) : box_scale;
+	float min_r2 = max(min_r * min_r, 0.02);
 	vec4 z = vec4(pos, 1.0);
 	float orbit = 1e9;
 	int iters = min(iterations, 24);
 	for (int i = 0; i < iters; i++) {
 		if (length(z.xyz) > 6.0 || abs(z.w) > 1e12) break;
-		z.xyz = clamp(z.xyz, -1.0, 1.0) * 2.0 - z.xyz;   // box fold
+		z.xyz = clamp(z.xyz, -box_fold, box_fold) * 2.0 - z.xyz; // box fold
 		float r2 = dot(z.xyz, z.xyz);
-		if (r2 < 0.25) z *= 4.0;                          // sphere fold (1.0 / 0.25)
+		if (r2 < min_r2) z *= 1.0 / min_r2;                      // sphere fold
 		else if (r2 < 1.0) z *= 1.0 / r2;
-		z = z * box_scale + vec4(pos, 0.0);
+		z = z * vec4(vec3(s), abs(s)) + vec4(pos, 0.0);
 		orbit = min(orbit, r2);
 	}
 	trap = clamp(sqrt(orbit) * 0.5, 0.0, 1.0);
 	return length(z.xyz) / max(abs(z.w), 1e-6);
 }
 
-float tricorn_de(vec3 pos, float power, out float trap) {
+float tricorn_de(vec3 pos, float power, float phase_theta, float phase_phi, out float trap) {
 	vec3 z = pos;
 	float dr = 1.0;
 	float r = 0.0;
@@ -218,7 +226,8 @@ float tricorn_de(vec3 pos, float power, out float trap) {
 		float phi = (abs(z.x) + abs(z.y) > 1e-6) ? atan(z.y, z.x) : 0.0;
 		dr = pow(safe_r, power - 1.0) * power * dr + 1.0;
 		float zr = pow(safe_r, power);
-		theta *= power; phi *= power;
+		theta = theta * power + phase_theta;
+		phi = phi * power + phase_phi;
 		z = zr * vec3(sin(theta) * cos(phi), sin(theta) * sin(phi), cos(theta)) + pos;
 		orbit = min(orbit, r);
 	}
@@ -226,7 +235,7 @@ float tricorn_de(vec3 pos, float power, out float trap) {
 	return 0.5 * log(max(r, 1.0001)) * r / max(dr, 1e-6);
 }
 
-float nova_de(vec3 pos, vec3 c_off, out float trap) {
+float nova_de(vec3 pos, vec3 c_off, float relax, out float trap) {
 	vec3 z = pos;
 	vec3 dz = vec3(1.0, 0.0, 0.0);
 	float orbit = 1e9;
@@ -235,7 +244,7 @@ float nova_de(vec3 pos, vec3 c_off, out float trap) {
 		vec3 z2 = z * z;
 		vec3 z3 = z2 * z;
 		dz = 3.0 * z2 * dz;
-		z = z - (z3 - vec3(1.0)) / (3.0 * z2 + vec3(1e-4)) + c_off; // Newton step + constant
+		z = z - relax * (z3 - vec3(1.0)) / (3.0 * z2 + vec3(1e-4)) + c_off; // Newton step + constant
 		orbit = min(orbit, dot(z, z));
 	}
 	trap = clamp(sqrt(orbit) * 0.6, 0.0, 1.0);
@@ -243,13 +252,13 @@ float nova_de(vec3 pos, vec3 c_off, out float trap) {
 }
 
 // Apollonian gasket via repeated cell-folding + inversion (after iq).
-float apollonian_de(vec3 p, float k, out float trap) {
+float apollonian_de(vec3 p, float k, float shift, out float trap) {
 	float scale = 1.0;
 	vec3 z = p;
 	float orbit = 1e9;
 	int iters = min(iterations, 16);
 	for (int i = 0; i < iters; i++) {
-		z = -1.0 + 2.0 * fract(0.5 * z + 0.5);
+		z = -1.0 + 2.0 * fract(0.5 * (z + vec3(shift)) + 0.5);
 		float r2 = dot(z, z);
 		orbit = min(orbit, r2);
 		float kk = k / max(r2, 1e-4);
@@ -262,18 +271,17 @@ float apollonian_de(vec3 p, float k, out float trap) {
 }
 
 // Kaleidoscopic IFS: a Sierpinski fold with rotations between iterations.
-float kifs_de(vec3 z, float ang, out float trap) {
-	float scale = 2.0;
+float kifs_de(vec3 z, float ang_xy, float ang_yz, float scale, float offset, out float trap) {
 	float orbit = 1e9;
 	int iters = min(iterations, 20);
 	for (int i = 0; i < iters; i++) {
-		z.xy = rot2(z.xy, ang);
+		z.xy = rot2(z.xy, ang_xy);
 		z = abs(z);
 		if (z.x < z.y) z.xy = z.yx;
 		if (z.x < z.z) z.xz = z.zx;
 		if (z.y < z.z) z.yz = z.zy;
-		z.yz = rot2(z.yz, ang * 0.7);
-		z = z * scale - vec3(1.0) * (scale - 1.0);
+		z.yz = rot2(z.yz, ang_yz);
+		z = z * scale - vec3(offset) * (scale - 1.0);
 		orbit = min(orbit, dot(z, z));
 	}
 	trap = clamp(sqrt(orbit) * 0.3, 0.0, 1.0);
@@ -281,15 +289,16 @@ float kifs_de(vec3 z, float ang, out float trap) {
 }
 
 // Octahedral IFS (abs + sort fold).
-float octahedral_de(vec3 z, float s, out float trap) {
+float octahedral_de(vec3 z, float s, float offset, float rot, out float trap) {
 	float orbit = 1e9;
 	int iters = min(iterations, 20);
 	for (int i = 0; i < iters; i++) {
+		if (abs(rot) > 1e-4) z.xz = rot2(z.xz, rot);
 		z = abs(z);
 		if (z.x < z.y) z.xy = z.yx;
 		if (z.x < z.z) z.xz = z.zx;
 		if (z.y < z.z) z.yz = z.zy;
-		z = z * s - vec3(1.0) * (s - 1.0);
+		z = z * s - vec3(offset) * (s - 1.0);
 		orbit = min(orbit, dot(z, z));
 	}
 	trap = clamp(sqrt(orbit) * 0.3, 0.0, 1.0);
@@ -297,24 +306,24 @@ float octahedral_de(vec3 z, float s, out float trap) {
 }
 
 // Gyroid triply-periodic minimal surface (thickened isosurface).
-float gyroid_de(vec3 p, float s, out float trap) {
-	vec3 q = p * s;
+float gyroid_de(vec3 p, float s, float thickness, float phase, out float trap) {
+	vec3 q = p * s + vec3(phase);
 	float f = dot(sin(q), cos(q.yzx));
 	trap = clamp(abs(f), 0.0, 1.0);
-	return (abs(f) - 0.2) * 0.3 / s;
+	return (abs(f) - thickness) * 0.3 / max(s, 0.1);
 }
 
 // Schwarz-P triply-periodic minimal surface (thickened isosurface).
-float schwarz_de(vec3 p, float s, out float trap) {
-	vec3 q = p * s;
+float schwarz_de(vec3 p, float s, float thickness, float phase, out float trap) {
+	vec3 q = p * s + vec3(phase);
 	float f = cos(q.x) + cos(q.y) + cos(q.z);
 	trap = clamp(abs(f) * 0.3, 0.0, 1.0);
-	return (abs(f) - 0.2) * 0.3 / s;
+	return (abs(f) - thickness) * 0.3 / max(s, 0.1);
 }
 
 // Cubic quaternion Julia: z = z^3 + c.
-float qjulia3_de(vec3 pos, vec4 c, out float trap) {
-	vec4 z = vec4(pos, 0.0);
+float qjulia3_de(vec3 pos, vec4 c, float slice_w, out float trap) {
+	vec4 z = vec4(pos, slice_w);
 	float dz2 = 1.0;
 	float m2 = dot(z, z);
 	float orbit = 1e9;
@@ -352,32 +361,40 @@ float fractal_radius(int type) {
 	return 1.5;                  // Quaternion Julia
 }
 
-// Distance estimator for one fractal. `shape` (scrubbed) sets its defining
-// parameter and `anim` (= TIME * morph_speed) oscillates it so it animates.
-float de(int type, vec3 p, float anim, out float trap) {
-	if (type == 1) return mandelbulb_de(p, clamp(8.0 + 4.0 * sin(shape) + sin(anim), 2.0, 12.0), trap);
-	if (type == 2) return qmandel_de(p, 0.18 * vec4(sin(shape), cos(shape * 0.9), sin(anim), cos(anim * 0.8)), trap);
-	if (type == 3) return menger_de(p, 3.0 + 0.6 * sin(shape) + 0.15 * sin(anim), trap);
-	if (type == 4) return sierpinski_de(p, 2.0 + 0.28 * sin(shape) + 0.05 * sin(anim), trap);
-	if (type == 5) return burningship_de(p, clamp(8.0 + 4.0 * sin(shape) + sin(anim), 2.0, 12.0), trap);
-	if (type == 6) return mandelbox_de(p, 2.0 + 0.5 * sin(shape) + 0.1 * sin(anim), trap);
-	if (type == 7) return tricorn_de(p, clamp(8.0 + 4.0 * sin(shape) + sin(anim), 2.0, 12.0), trap);
-	if (type == 8) return nova_de(p, 0.3 * vec3(cos(shape), sin(shape * 0.9), cos(shape * 1.3)) + 0.1 * vec3(sin(anim)), trap);
-	if (type == 9) return apollonian_de(p, 1.0 + 0.25 * sin(shape), trap);
-	if (type == 10) return kifs_de(p, 0.4 + 0.3 * sin(shape) + 0.1 * sin(anim), trap);
-	if (type == 11) return octahedral_de(p, 2.0 + 0.3 * sin(shape), trap);
-	if (type == 12) return gyroid_de(p, 3.0 + 1.0 * sin(shape) + 0.3 * sin(anim), trap);
-	if (type == 13) return schwarz_de(p, 3.0 + 1.0 * sin(shape), trap);
-	if (type == 14) return mandelbulb_de(p, clamp(3.0 + 1.5 * sin(shape) + 0.5 * sin(anim), 2.0, 6.0), trap);
+// Distance estimator for one fractal. `fp`/`fp4` set its per-formula parameters,
+// `shape` modulates around them, and `anim` (= TIME * morph_speed) animates it.
+float de(int type, vec3 p, float anim, vec4 fp, float fp4, out float trap) {
+	if (type == 1) return mandelbulb_de(p, clamp(fp.x + 4.0 * sin(shape) + sin(anim), 1.5, 16.0), fp.y, fp.z, trap);
+	if (type == 2) {
+		vec4 off = fp + 0.18 * vec4(sin(shape), cos(shape * 0.9) - 1.0, sin(anim), cos(anim * 0.8) - 1.0);
+		return qmandel_de(p, off, fp4, trap);
+	}
+	if (type == 3) return menger_de(p, max(fp.x + 0.6 * sin(shape) + 0.15 * sin(anim), 1.5), fp.y, fp.z, trap);
+	if (type == 4) return sierpinski_de(p, max(fp.x + 0.28 * sin(shape) + 0.05 * sin(anim), 1.05), fp.y, fp.z, trap);
+	if (type == 5) return burningship_de(p, clamp(fp.x + 4.0 * sin(shape) + sin(anim), 1.5, 16.0), fp.y, fp.z, trap);
+	if (type == 6) return mandelbox_de(p, fp.x + 0.5 * sin(shape) + 0.1 * sin(anim), max(fp.y, 0.1), fp.z, trap);
+	if (type == 7) return tricorn_de(p, clamp(fp.x + 4.0 * sin(shape) + sin(anim), 1.5, 16.0), fp.y, fp.z, trap);
+	if (type == 8) {
+		vec3 off = fp.xyz + 0.3 * vec3(cos(shape) - 1.0, sin(shape * 0.9), cos(shape * 1.3) - 1.0) + 0.1 * vec3(sin(anim));
+		return nova_de(p, off, max(fp.w, 0.1), trap);
+	}
+	if (type == 9) return apollonian_de(p, max(fp.x + 0.25 * sin(shape), 0.1), fp.y, trap);
+	if (type == 10) {
+		return kifs_de(p, fp.x + 0.3 * sin(shape) + 0.1 * sin(anim), fp.y + 0.21 * sin(shape) + 0.07 * sin(anim), max(fp.z, 1.05), fp.w, trap);
+	}
+	if (type == 11) return octahedral_de(p, max(fp.x + 0.3 * sin(shape), 1.05), fp.y, fp.z, trap);
+	if (type == 12) return gyroid_de(p, max(fp.x + 1.0 * sin(shape) + 0.3 * sin(anim), 0.1), fp.y, fp.z, trap);
+	if (type == 13) return schwarz_de(p, max(fp.x + 1.0 * sin(shape), 0.1), fp.y, fp.z, trap);
+	if (type == 14) return mandelbulb_de(p, clamp(fp.x + 1.5 * sin(shape) + 0.5 * sin(anim), 1.5, 16.0), fp.y, fp.z, trap);
 	if (type == 15) {
-		vec4 c3 = 0.4 * vec4(cos(shape), sin(shape * 0.9), cos(shape * 1.3), sin(shape * 0.5))
-			+ 0.1 * vec4(sin(anim), cos(anim), sin(anim * 1.3), cos(anim * 0.7));
-		return qjulia3_de(p, c3, trap);
+		vec4 c3 = fp + 0.4 * vec4(cos(shape) - 1.0, sin(shape * 0.9), cos(shape * 1.3) - 1.0, sin(shape * 0.5))
+			+ 0.1 * vec4(sin(anim), cos(anim) - 1.0, sin(anim * 1.3), cos(anim * 0.7) - 1.0);
+		return qjulia3_de(p, c3, fp4, trap);
 	}
 	// 0 = Quaternion Julia: shape sweeps the c constant, anim wobbles it.
-	vec4 c = 0.5 * vec4(cos(shape), sin(shape * 0.9), cos(shape * 1.3), sin(shape * 0.5))
-		+ 0.12 * vec4(sin(anim), cos(anim * 0.8), sin(anim * 1.2), cos(anim * 0.6));
-	return qjulia_de(p, c, trap);
+	vec4 c = fp + 0.5 * vec4(cos(shape) - 1.0, sin(shape * 0.9), cos(shape * 1.3) - 1.0, sin(shape * 0.5))
+		+ 0.12 * vec4(sin(anim), cos(anim * 0.8) - 1.0, sin(anim * 1.2), cos(anim * 0.6) - 1.0);
+	return qjulia_de(p, c, fp4, trap);
 }
 
 float fractal_scale(int type) {
@@ -388,11 +405,11 @@ float fractal_scale(int type) {
 // fractals with different canonical domain radii stay properly framed.
 float map_obj(vec3 p_obj, float anim, out float trap) {
 	float sA = fractal_scale(fractal_type);
-	float dA = de(fractal_type, p_obj * sA, anim, trap) / sA;
+	float dA = de(fractal_type, p_obj * sA, anim, fractal_params_a, fractal_param4_a, trap) / sA;
 	if (morph <= 0.001) return dA; // common case: one evaluation
 	float tB;
 	float sB = fractal_scale(morph_target);
-	float dB = de(morph_target, p_obj * sB, anim, tB) / sB;
+	float dB = de(morph_target, p_obj * sB, anim, fractal_params_b, fractal_param4_b, tB) / sB;
 	trap = mix(trap, tB, morph);
 	return mix(dA, dB, morph);
 }

@@ -5,8 +5,8 @@ namespace Vrqf;
 // A settings panel anchored above the left controller, rendered via a
 // SubViewport onto a quad. The right controller aims a ray at the panel;
 // pulling the trigger injects a click into the SubViewport. All edits go
-// through the FractalController (and Main
-// for the AR toggle), so the menu, triggers, and shader stay in sync.
+// through the shared FractalUiBuilder -> FractalController (and Main for AR),
+// keeping desktop and VR controls unified and in sync.
 public partial class WristMenu : Node3D
 {
     [Export] public NodePath RightControllerPath { get; set; } = "../../RightController";
@@ -20,6 +20,7 @@ public partial class WristMenu : Node3D
 
     private FractalController? _fc;
     private Main? _main;
+    private FractalUiView? _view;
     private XRController3D? _right;
     private SubViewport? _vp;
     private MeshInstance3D? _quad;
@@ -27,11 +28,7 @@ public partial class WristMenu : Node3D
     private MeshInstance3D? _cursor;
     private float _panelHeight;
     private float _prevTrigger;
-
-    private Label? _fracVal, _matVal, _palVal, _colorVal, _detailVal, _shapeVal, _speedVal, _zoomVal, _qualVal;
-    private Label? _morphTgtVal, _morphVal, _roughVal, _metalVal, _emissionVal, _hueCyclesVal, _hueOffsetVal;
-    private Button? _autoMorphBtn, _arBtn;
-    private Button? _roughMinus, _roughPlus, _metalMinus, _metalPlus;
+    private bool _wasOnPanel;
 
     public override void _Ready()
     {
@@ -42,6 +39,21 @@ public partial class WristMenu : Node3D
 
         BuildViewport();
         BuildQuad();
+
+        if (_fc is not null)
+            _fc.StateChanged += OnStateChanged;
+        if (_main is not null)
+            _main.ArModeChanged += OnStateChanged;
+
+        RequestViewportUpdate();
+    }
+
+    public override void _ExitTree()
+    {
+        if (_fc is not null)
+            _fc.StateChanged -= OnStateChanged;
+        if (_main is not null)
+            _main.ArModeChanged -= OnStateChanged;
     }
 
     private void BuildViewport()
@@ -51,7 +63,7 @@ public partial class WristMenu : Node3D
             Size = Resolution,
             TransparentBg = true,
             Disable3D = true,
-            RenderTargetUpdateMode = SubViewport.UpdateMode.Always,
+            RenderTargetUpdateMode = SubViewport.UpdateMode.Once,
             GuiDisableInput = false,
         };
         AddChild(_vp);
@@ -63,115 +75,15 @@ public partial class WristMenu : Node3D
         var margin = new MarginContainer();
         margin.SetAnchorsPreset(Control.LayoutPreset.FullRect);
         foreach (var side in new[] { "margin_left", "margin_top", "margin_right", "margin_bottom" })
-            margin.AddThemeConstantOverride(side, 14);
+            margin.AddThemeConstantOverride(side, 10);
         _vp.AddChild(margin);
 
         var tabs = new TabContainer { Name = "WristTabs" };
+        tabs.TabChanged += _ => RequestViewportUpdate();
         margin.AddChild(tabs);
 
-        var fractalTab = AddTab(tabs, "Fractal");
-        _fracVal = SelectorRow(fractalTab, "Fractal", d => _fc?.CycleFractal(d));
-        _detailVal = StepRow(fractalTab, "Detail", d => _fc?.AdjustDetail(d), 1f);
-        _shapeVal = StepRow(fractalTab, "Shape", d => _fc?.AdjustShape(d), 0.3f);
-        _speedVal = StepRow(fractalTab, "Speed", d => _fc?.AdjustSpeed(d), 0.05f);
-        _zoomVal = StepRow(fractalTab, "Zoom", d => _fc?.AdjustZoom(d), 0.1f);
-        _qualVal = StepRow(fractalTab, "Quality", d => _fc?.AdjustQuality(d), 8f);
-
-        var rnd = new Button { Text = "Randomize", CustomMinimumSize = new Vector2(0, 60) };
-        rnd.AddThemeFontSizeOverride("font_size", 24);
-        rnd.Pressed += () => _fc?.Randomize();
-        fractalTab.AddChild(rnd);
-
-        var morphTab = AddTab(tabs, "Morph");
-        _autoMorphBtn = new Button { Text = "Auto morph: On", CustomMinimumSize = new Vector2(0, 56) };
-        _autoMorphBtn.AddThemeFontSizeOverride("font_size", 22);
-        _autoMorphBtn.Pressed += () => _fc?.ToggleAutoMorph();
-        morphTab.AddChild(_autoMorphBtn);
-        _morphTgtVal = SelectorRow(morphTab, "Target", d => _fc?.CycleMorphTarget(d));
-        _morphVal = StepRow(morphTab, "Morph", d => _fc?.AdjustMorph(d), 0.1f);
-
-        _arBtn = new Button { Text = "AR / VR", CustomMinimumSize = new Vector2(0, 60) };
-        _arBtn.AddThemeFontSizeOverride("font_size", 24);
-        _arBtn.Pressed += () => _main?.ToggleAr();
-        morphTab.AddChild(_arBtn);
-
-        var materialTab = AddTab(tabs, "Material");
-        _matVal = SelectorRow(materialTab, "Material", d => _fc?.CycleMaterial(d));
-        _colorVal = SelectorRow(materialTab, "Colour", d => _fc?.CycleColorMode(d));
-        _palVal = SelectorRow(materialTab, "Palette", d => _fc?.CyclePalette(d));
-        _hueCyclesVal = StepRow(materialTab, "Hue cycles", d => _fc?.AdjustRadialHueCycles(d), 0.1f);
-        _hueOffsetVal = StepRow(materialTab, "Hue offset", d => _fc?.AdjustRadialHueOffset(d), 0.05f);
-        var rough = StepRowControls(materialTab, "Roughness", d => _fc?.AdjustMaterialRoughness(d), 0.1f);
-        _roughVal = rough.Value;
-        _roughMinus = rough.Minus;
-        _roughPlus = rough.Plus;
-        var metal = StepRowControls(materialTab, "Metalness", d => _fc?.AdjustMaterialMetallic(d), 0.1f);
-        _metalVal = metal.Value;
-        _metalMinus = metal.Minus;
-        _metalPlus = metal.Plus;
-        _emissionVal = StepRow(materialTab, "Emission", d => _fc?.AdjustMaterialEmission(d), 0.1f);
-    }
-
-    private static VBoxContainer AddTab(TabContainer tabs, string name)
-    {
-        var page = new VBoxContainer { Name = name };
-        page.AddThemeConstantOverride("separation", 8);
-        tabs.AddChild(page);
-        return page;
-    }
-
-    private Label SelectorRow(VBoxContainer parent, string name, System.Action<int> cycle)
-    {
-        var (row, value) = RowBase(name);
-        row.AddChild(StepButton("<", () => cycle(-1), 52));
-        row.AddChild(value);
-        row.AddChild(StepButton(">", () => cycle(1), 52));
-        parent.AddChild(row);
-        return value;
-    }
-
-    private Label StepRow(VBoxContainer parent, string name, System.Action<float> adjust, float step) =>
-        StepRowControls(parent, name, adjust, step).Value;
-
-    private (Label Value, Button Minus, Button Plus) StepRowControls(
-        VBoxContainer parent, string name, System.Action<float> adjust, float step)
-    {
-        var (row, value) = RowBase(name);
-        var minus = StepButton("-", () => adjust(-step));
-        minus.TooltipText = $"Decrease {name.ToLowerInvariant()}";
-        row.AddChild(minus);
-        row.AddChild(value);
-        var plus = StepButton("+", () => adjust(step));
-        plus.TooltipText = $"Increase {name.ToLowerInvariant()}";
-        row.AddChild(plus);
-        parent.AddChild(row);
-        return (value, minus, plus);
-    }
-
-    private (HBoxContainer, Label) RowBase(string name)
-    {
-        var row = new HBoxContainer();
-        row.AddThemeConstantOverride("separation", 8);
-        var label = new Label { Text = name, SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
-        label.AddThemeFontSizeOverride("font_size", 22);
-        row.AddChild(label);
-        var value = new Label
-        {
-            Text = "-",
-            CustomMinimumSize = new Vector2(96, 0),
-            HorizontalAlignment = HorizontalAlignment.Center,
-        };
-        value.AddThemeFontSizeOverride("font_size", 18);
-        value.AddThemeColorOverride("font_color", new Color(0.95f, 0.85f, 0.4f));
-        return (row, value);
-    }
-
-    private static Button StepButton(string text, System.Action onPressed, float width = 64)
-    {
-        var b = new Button { Text = text, CustomMinimumSize = new Vector2(width, 56) };
-        b.AddThemeFontSizeOverride("font_size", 26);
-        b.Pressed += () => onPressed();
-        return b;
+        if (_fc is not null)
+            _view = FractalUiBuilder.Build(tabs, _fc, _main, UiMode.VrWrist);
     }
 
     private void BuildQuad()
@@ -216,10 +128,19 @@ public partial class WristMenu : Node3D
         AlbedoColor = c,
     };
 
-    public override void _Process(double _delta)
+    public override void _Process(double _delta) => PollPointer();
+
+    private void OnStateChanged()
     {
-        RefreshValues();
-        PollPointer();
+        _view?.RebuildDynamicTabIfNeeded();
+        _view?.Refresh();
+        RequestViewportUpdate();
+    }
+
+    private void RequestViewportUpdate()
+    {
+        if (_vp is not null)
+            _vp.RenderTargetUpdateMode = SubViewport.UpdateMode.Once;
     }
 
     // Ray-cast the right controller forward onto the panel plane and inject
@@ -271,34 +192,9 @@ public partial class WristMenu : Node3D
             _vp.PushInput(new InputEventMouseButton { Position = px, ButtonIndex = MouseButton.Left, Pressed = false });
         }
         _prevTrigger = trigger;
-    }
 
-    private void RefreshValues()
-    {
-        if (_fc is null) return;
-        if (_fracVal is not null) _fracVal.Text = _fc.FractalName;
-        if (_matVal is not null) _matVal.Text = _fc.MaterialName;
-        if (_colorVal is not null) _colorVal.Text = _fc.ColorModeName;
-        if (_palVal is not null) _palVal.Text = _fc.PaletteName;
-        if (_hueCyclesVal is not null) _hueCyclesVal.Text = _fc.RadialHueCyclesValue.ToString("0.00");
-        if (_hueOffsetVal is not null) _hueOffsetVal.Text = _fc.RadialHueOffsetValue.ToString("0.00");
-        if (_detailVal is not null) _detailVal.Text = _fc.DetailText;
-        if (_shapeVal is not null) _shapeVal.Text = _fc.ShapeText;
-        if (_speedVal is not null) _speedVal.Text = _fc.SpeedText;
-        if (_zoomVal is not null) _zoomVal.Text = _fc.ZoomText;
-        if (_qualVal is not null) _qualVal.Text = _fc.QualityText;
-        if (_morphTgtVal is not null) _morphTgtVal.Text = _fc.MorphTargetName;
-        if (_morphVal is not null) _morphVal.Text = _fc.MorphText;
-        if (_autoMorphBtn is not null) _autoMorphBtn.Text = _fc.AutoMorph ? "Auto morph: On" : "Auto morph: Off";
-        if (_roughVal is not null) _roughVal.Text = _fc.MaterialRoughnessValue.ToString("0.00");
-        if (_metalVal is not null) _metalVal.Text = _fc.MaterialMetallicValue.ToString("0.00");
-        if (_emissionVal is not null) _emissionVal.Text = _fc.MaterialEmissionValue.ToString("0.00");
-        bool surface = _fc.MaterialSupportsSurfaceParams;
-        if (_roughMinus is not null) _roughMinus.Disabled = !surface;
-        if (_roughPlus is not null) _roughPlus.Disabled = !surface;
-        if (_metalMinus is not null) _metalMinus.Disabled = !surface;
-        if (_metalPlus is not null) _metalPlus.Disabled = !surface;
-        if (_arBtn is not null && _main is not null)
-            _arBtn.Text = _main.ArAvailable ? (_main.IsAr ? "Switch to VR" : "Switch to AR") : "AR unavailable";
+        if (onPanel || _wasOnPanel)
+            RequestViewportUpdate();
+        _wasOnPanel = onPanel;
     }
 }

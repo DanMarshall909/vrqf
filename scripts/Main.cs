@@ -53,6 +53,8 @@ public partial class Main : Node3D
 
     private void ToggleHelp() => GetNodeOrNull<HelpOverlay>("Help")?.Toggle();
 
+    public event System.Action? ArModeChanged;
+
     public bool ArAvailable => _passthroughSupported;
     public bool IsAr => _ar;
 
@@ -86,6 +88,7 @@ public partial class Main : Node3D
         }
 
         GD.Print(on ? "vrqf AR — passthrough ON" : "vrqf AR — passthrough OFF (VR)");
+        ArModeChanged?.Invoke();
     }
 
     public override void _UnhandledInput(InputEvent @event)
