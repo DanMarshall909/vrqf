@@ -119,7 +119,7 @@ float mandelbulb_de(vec3 pos, float power, out float trap) {
 		float theta = acos(clamp(z.z / safe_r, -1.0, 1.0));
 		float phi = (abs(z.x) + abs(z.y) > 1e-6) ? atan(z.y, z.x) : 0.0;
 		dr = pow(safe_r, power - 1.0) * power * dr + 1.0;
-		float zr = pow(r, power);
+		float zr = pow(safe_r, power);
 		theta *= power;
 		phi *= power;
 		z = zr * vec3(sin(theta) * cos(phi), sin(theta) * sin(phi), cos(theta)) + pos;
@@ -142,7 +142,7 @@ float burningship_de(vec3 pos, float power, out float trap) {
 		float theta = acos(clamp(z.z / safe_r, -1.0, 1.0));
 		float phi = (abs(z.x) + abs(z.y) > 1e-6) ? atan(z.y, z.x) : 0.0;
 		dr = pow(safe_r, power - 1.0) * power * dr + 1.0;
-		float zr = pow(r, power);
+		float zr = pow(safe_r, power);
 		theta *= power;
 		phi *= power;
 		z = zr * vec3(sin(theta) * cos(phi), sin(theta) * sin(phi), cos(theta)) + pos;
@@ -217,7 +217,7 @@ float tricorn_de(vec3 pos, float power, out float trap) {
 		float theta = acos(clamp(z.z / safe_r, -1.0, 1.0));
 		float phi = (abs(z.x) + abs(z.y) > 1e-6) ? atan(z.y, z.x) : 0.0;
 		dr = pow(safe_r, power - 1.0) * power * dr + 1.0;
-		float zr = pow(r, power);
+		float zr = pow(safe_r, power);
 		theta *= power; phi *= power;
 		z = zr * vec3(sin(theta) * cos(phi), sin(theta) * sin(phi), cos(theta)) + pos;
 		orbit = min(orbit, r);
@@ -430,11 +430,12 @@ float calc_soft_shadow(vec3 p_obj, vec3 n_obj, vec3 l_dir_obj, float anim) {
 	vec3 ro = p_obj + n_obj * (epsilon * 2.0);
 	float trap;
 	for (int i = 0; i < 16; i++) {
-		float d = map_obj(ro + l_dir_obj * t, anim, trap);
+		vec3 p_s = ro + l_dir_obj * t;
+		if (length(p_s) > mesh_half || t > max_t) break;
+		float d = map_obj(p_s, anim, trap);
 		if (d < epsilon * 0.5) return 0.2;
 		res = min(res, 6.0 * d / t);
 		t += clamp(d, 0.01 * mesh_half, 0.12 * mesh_half);
-		if (t > max_t) break;
 	}
 	return clamp(res, 0.2, 1.0);
 }
@@ -601,10 +602,10 @@ void fragment() {
 		ROUGHNESS = 1.0;
 	}
 
-	// Write correct per-eye depth so the floor and controllers occlude the fractal.
+	// Write correct depth so the floor and controllers occlude the fractal.
+	// In Godot Forward+ multiview, PROJECTION_MATRIX already encodes the per-eye
+	// offset relative to central VIEW_MATRIX space (matching scene_forward_clustered.glsl).
 	vec3 hit_world = (MODEL_MATRIX * vec4(p_obj, 1.0)).xyz;
-	vec4 hit_view = VIEW_MATRIX * vec4(hit_world, 1.0);
-	hit_view.xyz -= EYE_OFFSET;
-	vec4 clip = PROJECTION_MATRIX * hit_view;
+	vec4 clip = PROJECTION_MATRIX * VIEW_MATRIX * vec4(hit_world, 1.0);
 	DEPTH = clip.z / clip.w;
 }
