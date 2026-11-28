@@ -21,7 +21,7 @@ The project includes:
 * Live parameter adjustment from the desktop panel, VR wrist menu, controllers, or keyboard
 * One large fractal that automatically morphs through the available types
 * Adjustable roughness, metalness, and emission with settings remembered for each material
-* Experimental reflective, emissive, plastic, metal, glass, and matcap-style materials
+* Experimental reflective, emissive, plastic, metal, glass, matcap, and 3D UVW procedural materials (`UVW RGB`, `UVW Marble`, `UVW Grid`, `UVW Contours`, `UVW Opal`, `UVW Voronoi`)
 
 ## Fractals included
 
@@ -74,7 +74,7 @@ It is not intended to be a polished product. It is a technical and visual experi
 
 The project supports desktop controls and VR controller input. Both the desktop panel (upper-right) and the VR wrist menu share the same four tabs:
 
-* **Material**: style, colour source, palette, hue cycles, hue offset, roughness, metalness, emission, ambient occlusion (`AO`), and soft self-shadows (`Shadows`). Roughness and metalness apply to Plastic, Metal, and Glass; edits are remembered per material style.
+* **Material**: style (including Glow, Plastic, Metal, Glass, Matcaps, and 3D object-space UVW materials: `UVW RGB`, `UVW Marble`, `UVW Grid`, `UVW Contours`, `UVW Opal`, `UVW Voronoi`), colour source, palette, hue cycles (spatial frequency for radial hue & UVW styles), hue offset, roughness, metalness, emission, ambient occlusion (`AO`), and soft self-shadows (`Shadows`). Roughness and metalness apply to Plastic, Metal, Glass, and all UVW materials; edits are remembered per material style.
 * **Fractal**: active fractal type, detail, shape, animation speed, size, quality, and a **Randomize** button.
 * **Params**: context-sensitive mathematical parameters for the active fractal (for example, Quaternion Julia `C` components and 4D `w` slice, Mandelbulb/Burning Ship/Tricorn `Power` and angles, Mandelbox `Scale`/`Box fold`/`Min radius`, KIFS angles, Gyroid/Schwarz P frequency and thickness), remembered per fractal type with a **Reset formula** button.
 * **Morph**: automatic morphing toggle, morph target, manual morph amount, dwell **Hold (s)**, **Transition (s)**, and (in VR) the **AR / VR** toggle.

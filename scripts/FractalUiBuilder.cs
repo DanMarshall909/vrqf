@@ -115,7 +115,7 @@ public static class FractalUiBuilder
             () => fc.ColorModeName, d => fc.CycleColorMode(d));
         yield return new SelectorItem("Palette", "Palette", "Previous palette", "Next palette",
             () => fc.PaletteName, d => fc.CyclePalette(d));
-        yield return new RangeItem("Hue cycles", null, 0.25f, 4f, 0.01f, 0.1f, "0.00",
+        yield return new RangeItem("Hue cycles", null, 0.25f, 8f, 0.01f, 0.1f, "0.00",
             () => fc.RadialHueCyclesValue, d => fc.AdjustRadialHueCycles(d));
         yield return new RangeItem("Hue offset", null, 0f, 1f, 0.01f, 0.05f, "0.00",
             () => fc.RadialHueOffsetValue, d => fc.AdjustRadialHueOffset(d));
