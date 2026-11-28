@@ -68,6 +68,7 @@ public partial class FractalController : MeshInstance3D
     public static readonly string[] MaterialNames =
     {
         "Glow", "Plastic", "Metal", "Glass", "Matcap Chrome", "Matcap Gold", "Matcap Pearl",
+        "UVW RGB", "UVW Marble", "UVW Grid", "UVW Contours", "UVW Opal", "UVW Voronoi",
     };
 
     private static readonly string[] PalettePaths =
@@ -108,9 +109,9 @@ public partial class FractalController : MeshInstance3D
     private float _morphLinear;
     private float _morphHoldRemaining;
     private readonly float[,] _formulaParams = new float[FractalSchema.Fractals.Length, FractalSchema.MaxFormulaParams];
-    private readonly float[] _roughnessByMaterial = { 1f, 0.35f, 0.08f, 0.02f, 1f, 1f, 1f };
-    private readonly float[] _metallicByMaterial = { 0f, 0f, 1f, 0f, 0f, 0f, 0f };
-    private readonly float[] _emissionByMaterial = { 1f, 0.05f, 0f, 0.25f, 1f, 1f, 1f };
+    private readonly float[] _roughnessByMaterial = { 1f, 0.35f, 0.08f, 0.02f, 1f, 1f, 1f, 0.25f, 0.18f, 0.45f, 0.30f, 0.10f, 0.20f };
+    private readonly float[] _metallicByMaterial = { 0f, 0f, 1f, 0f, 0f, 0f, 0f, 0f, 0.05f, 0.15f, 0.10f, 0.35f, 0.40f };
+    private readonly float[] _emissionByMaterial = { 1f, 0.05f, 0f, 0.25f, 1f, 1f, 1f, 0.08f, 0.04f, 0.75f, 0.55f, 0.65f, 0.80f };
 
     public override void _Ready()
     {
@@ -191,7 +192,7 @@ public partial class FractalController : MeshInstance3D
     public float RadialHueOffsetValue => _radialHueOffset;
     public float AoStrengthValue => _aoStrength;
     public float ShadowStrengthValue => _shadowStrength;
-    public bool MaterialSupportsSurfaceParams => _materialMode is 1 or 2 or 3;
+    public bool MaterialSupportsSurfaceParams => _materialMode is 1 or 2 or 3 or >= 7;
     public float GetFormulaParam(int index) => _formulaParams[_fractal, index];
 
     public override void _Process(double delta)
@@ -363,7 +364,7 @@ public partial class FractalController : MeshInstance3D
 
     public void AdjustRadialHueCycles(float delta)
     {
-        _radialHueCycles = Mathf.Clamp(_radialHueCycles + delta, 0.25f, 4f);
+        _radialHueCycles = Mathf.Clamp(_radialHueCycles + delta, 0.25f, 8f);
         _material?.SetShaderParameter("radial_hue_cycles", _radialHueCycles);
         SetColorMode(1);
     }

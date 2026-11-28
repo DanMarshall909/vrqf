@@ -12,10 +12,13 @@
 //   3 = Menger sponge       7 = Tricorn (3D)   11 = Octahedral IFS     15 = Cubic Julia
 //
 // material_mode selects the surface look:
-//   0 = Glow (emissive palette)       4 = Matcap chrome
-//   1 = Plastic (lit, palette)        5 = Matcap gold
-//   2 = Metal  (reflective)           6 = Matcap pearl
-//   3 = Glass  (fresnel/reflective)
+//   0 = Glow (emissive palette)       7 = UVW RGB (3D coordinate cube)
+//   1 = Plastic (lit, palette)        8 = UVW Marble (3D fBM strata)
+//   2 = Metal  (reflective)           9 = UVW Grid (3D lattice & checker)
+//   3 = Glass  (fresnel/reflective)  10 = UVW Contours (3D origin shells)
+//   4 = Matcap chrome                11 = UVW Opal (3D iridescent flecks)
+//   5 = Matcap gold                  12 = UVW Voronoi (3D crystal cells)
+//   6 = Matcap pearl
 //
 // The lit pipeline (not unshaded) is what lets Godot's ReflectionProbe bounce
 // the real scene off the metal/glass surface. (SSR is unreliable here because
@@ -39,7 +42,7 @@ uniform float shape = 0.0;           // per-fractal shape parameter (scrubbed)
 uniform sampler2D palette_tex : source_color, hint_default_white;
 uniform sampler2D radial_hue_tex : source_color, hint_default_white;
 uniform int color_mode = 1;          // 0 = orbit palette, 1 = radial hue
-uniform float radial_hue_cycles : hint_range(0.25, 4.0) = 1.0;
+uniform float radial_hue_cycles : hint_range(0.25, 8.0) = 1.0;
 uniform float radial_hue_offset : hint_range(0.0, 1.0) = 0.0;
 uniform vec3 glow_color : source_color = vec3(0.6, 0.85, 1.0);
 uniform float mesh_half = 0.15;      // proxy sphere radius (object space)
@@ -468,6 +471,75 @@ vec3 procedural_matcap(vec3 nv, vec3 tint, float metal_sheen) {
 	return tint * (0.25 + key * 0.8) + vec3(1.0) * spec * 0.9 + tint * rim * 0.6;
 }
 
+vec3 hash33(vec3 p) {
+	p = fract(p * vec3(0.1031, 0.1030, 0.0973));
+	p += dot(p, p.yxz + 33.33);
+	return fract((p.xxy + p.yxx) * p.zyx);
+}
+
+float noise3(vec3 p) {
+	vec3 i = floor(p);
+	vec3 f = fract(p);
+	vec3 u = f * f * (3.0 - 2.0 * f);
+	float n000 = hash33(i + vec3(0.0, 0.0, 0.0)).x;
+	float n100 = hash33(i + vec3(1.0, 0.0, 0.0)).x;
+	float n010 = hash33(i + vec3(0.0, 1.0, 0.0)).x;
+	float n110 = hash33(i + vec3(1.0, 1.0, 0.0)).x;
+	float n001 = hash33(i + vec3(0.0, 0.0, 1.0)).x;
+	float n101 = hash33(i + vec3(1.0, 0.0, 1.0)).x;
+	float n011 = hash33(i + vec3(0.0, 1.0, 1.0)).x;
+	float n111 = hash33(i + vec3(1.0, 1.0, 1.0)).x;
+	float nx00 = mix(n000, n100, u.x);
+	float nx10 = mix(n010, n110, u.x);
+	float nx01 = mix(n001, n101, u.x);
+	float nx11 = mix(n011, n111, u.x);
+	return mix(mix(nx00, nx10, u.y), mix(nx01, nx11, u.y), u.z);
+}
+
+float fbm3(vec3 p) {
+	float v = 0.0;
+	float a = 0.5;
+	for (int i = 0; i < 4; i++) {
+		v += a * noise3(p);
+		p = p * 2.03 + vec3(13.7, 7.3, 19.1);
+		a *= 0.5;
+	}
+	return v;
+}
+
+// 3D cellular distance: returns vec2(edge_distance, cell_id).
+vec2 voronoi3(vec3 p) {
+	vec3 n = floor(p);
+	vec3 f = fract(p);
+	float md1 = 8.0;
+	float md2 = 8.0;
+	float cell_id = 0.0;
+	for (int k = -1; k <= 1; k++) {
+		for (int j = -1; j <= 1; j++) {
+			for (int i = -1; i <= 1; i++) {
+				vec3 g = vec3(float(i), float(j), float(k));
+				vec3 o = hash33(n + g);
+				vec3 r = g + o - f;
+				float d = dot(r, r);
+				if (d < md1) {
+					md2 = md1;
+					md1 = d;
+					cell_id = o.x;
+				} else if (d < md2) {
+					md2 = d;
+				}
+			}
+		}
+	}
+	return vec2(sqrt(md2) - sqrt(md1), cell_id);
+}
+
+vec3 sample_color(float u) {
+	return color_mode == 1
+		? texture(radial_hue_tex, vec2(fract(u + radial_hue_offset), 0.5)).rgb
+		: texture(palette_tex, vec2(clamp(u, 0.0, 1.0), 0.5)).rgb;
+}
+
 // Ray vs sphere of radius r centred at the origin (rd must be normalised).
 // A sphere has no edges or corners, so there are no straight clip-lines and
 // no grazing-ray precision artifacts the way an axis-aligned box has.
@@ -550,9 +622,11 @@ void fragment() {
 	vec3 l_dir_obj = normalize(inv_model_3 * shadow_light_dir);
 	float shad = mix(1.0, calc_soft_shadow(p_obj, n_obj, l_dir_obj, anim), shadow_strength);
 
-	// Sample a 1D hue texture by 3D distance from the fractal centre.
-	// Object-space position keeps the colours fixed as the camera moves.
-	float radial_distance = clamp(length(p_obj) / mesh_half, 0.0, 1.0);
+	// Sample a 1D hue texture by 3D distance from the fractal centre,
+	// and build normalized 3D object-space UVW coordinates in [-1, 1]^3.
+	vec3 uvw = p_obj / max(mesh_half, 0.001);
+	float uvw_scale = max(radial_hue_cycles, 0.25);
+	float radial_distance = clamp(length(uvw), 0.0, 1.0);
 	float hue_lookup = fract(radial_distance * radial_hue_cycles + radial_hue_offset);
 	vec3 pal = color_mode == 1
 		? texture(radial_hue_tex, vec2(hue_lookup, 0.5)).rgb
@@ -610,6 +684,93 @@ void fragment() {
 		EMISSION = m * material_emission * ao * mix(1.0, shad, 0.5);
 		METALLIC = 0.0;
 		ROUGHNESS = 1.0;
+	} else if (material_mode == 7) {
+		// UVW RGB: direct 3D object-space (u, v, w) coordinate cube.
+		vec3 rot_uvw = uvw;
+		rot_uvw.xz = rot2(rot_uvw.xz, radial_hue_offset * 6.2831853);
+		vec3 col = (uvw_scale <= 1.01)
+			? clamp(rot_uvw * 0.5 + 0.5, 0.0, 1.0)
+			: 0.5 + 0.5 * sin(rot_uvw * uvw_scale * 3.14159265);
+		ALBEDO = col * shad;
+		METALLIC = material_metallic;
+		ROUGHNESS = material_roughness;
+		SPECULAR = 0.5;
+		AO = ao;
+		AO_LIGHT_AFFECT = 0.7;
+		EMISSION = col * material_emission * ao;
+	} else if (material_mode == 8) {
+		// UVW Marble: domain-warped 3D strata & mineral veins.
+		vec3 q = uvw * (2.5 * uvw_scale);
+		float warp = fbm3(q);
+		float strata = sin((q.x + q.y * 0.65 - q.z * 0.45) * 2.4 + warp * 5.2);
+		float band = 0.5 + 0.5 * strata;
+		float vein = pow(1.0 - abs(strata), 6.0);
+		vec3 col = mix(sample_color(band * 0.85 + warp * 0.15), vec3(0.97, 0.96, 0.94), vein * 0.7);
+		ALBEDO = col * shad;
+		METALLIC = material_metallic;
+		ROUGHNESS = clamp(material_roughness * (1.0 - vein * 0.5), 0.02, 1.0);
+		SPECULAR = 0.6;
+		AO = ao;
+		AO_LIGHT_AFFECT = 0.7;
+		EMISSION = (col * 0.35 + vec3(vein * 0.65)) * material_emission * ao;
+	} else if (material_mode == 9) {
+		// UVW Grid: 3D volumetric checkerboard + glowing XYZ coordinate lattice.
+		vec3 g = uvw * (4.0 * uvw_scale);
+		vec3 cell = floor(g);
+		float checker = mod(cell.x + cell.y + cell.z, 2.0);
+		vec3 f = abs(fract(g) - 0.5);
+		float line = 1.0 - smoothstep(0.03, 0.08, min(min(f.x, f.y), f.z));
+		vec3 base = mix(vec3(0.09, 0.10, 0.13), vec3(0.20, 0.23, 0.28), checker);
+		vec3 line_col = sample_color(radial_distance * 0.7 + (cell.x + cell.y + cell.z) * 0.08);
+		ALBEDO = mix(base, line_col, line) * shad;
+		METALLIC = material_metallic;
+		ROUGHNESS = mix(material_roughness, 0.1, line);
+		SPECULAR = 0.5;
+		AO = ao;
+		AO_LIGHT_AFFECT = 0.7;
+		EMISSION = line_col * line * material_emission * ao;
+	} else if (material_mode == 10) {
+		// UVW Contours: crisp concentric 3D shells by distance from origin.
+		float shells = radial_distance * (6.0 * uvw_scale);
+		float shell_idx = floor(shells) / max(6.0 * uvw_scale, 1.0);
+		float frac_r = fract(shells);
+		float ring = 1.0 - smoothstep(0.06, 0.14, min(frac_r, 1.0 - frac_r));
+		vec3 shell_col = sample_color(shell_idx);
+		vec3 ring_col = mix(shell_col, vec3(1.0), 0.55);
+		ALBEDO = mix(shell_col * 0.65, ring_col, ring) * shad;
+		METALLIC = material_metallic;
+		ROUGHNESS = mix(material_roughness, 0.12, ring);
+		SPECULAR = 0.55;
+		AO = ao;
+		AO_LIGHT_AFFECT = 0.7;
+		EMISSION = ring_col * ring * material_emission * ao;
+	} else if (material_mode == 11) {
+		// UVW Opal: 3D noise interference + view-angle thin-film iridescence.
+		vec3 q = uvw * (3.2 * uvw_scale);
+		float n1 = fbm3(q);
+		float n2 = noise3(q * 2.7 + vec3(n1 * 3.0));
+		float spec_shift = n1 * 0.8 + n2 * 0.5 + fres * 0.45;
+		vec3 fire = sample_color(spec_shift);
+		vec3 body = mix(vec3(0.04, 0.06, 0.09), fire, smoothstep(0.35, 0.72, n2));
+		ALBEDO = body * shad;
+		METALLIC = material_metallic;
+		ROUGHNESS = material_roughness;
+		SPECULAR = 0.85;
+		AO = ao;
+		AO_LIGHT_AFFECT = 0.7;
+		EMISSION = fire * (0.25 + fres * 0.75) * smoothstep(0.30, 0.75, n2) * material_emission * ao;
+	} else if (material_mode == 12) {
+		// UVW Voronoi: 3D cellular crystal facets & glowing boundary veins.
+		vec2 vor = voronoi3(uvw * (3.5 * uvw_scale));
+		float crack = 1.0 - smoothstep(0.02, 0.075, vor.x);
+		vec3 cell_col = sample_color(vor.y + radial_distance * 0.35);
+		ALBEDO = mix(cell_col * 0.7, vec3(0.95), crack * 0.4) * shad;
+		METALLIC = material_metallic;
+		ROUGHNESS = mix(material_roughness, 0.08, crack);
+		SPECULAR = 0.7;
+		AO = ao;
+		AO_LIGHT_AFFECT = 0.7;
+		EMISSION = cell_col * (0.15 + crack * 1.15) * material_emission * ao;
 	} else {
 		// Glow: emissive palette (the default look).
 		vec3 col = pal * (0.45 + fres * 0.75) + glow_color * fres * 0.65;
