@@ -11,6 +11,7 @@ public partial class XRMovement : XROrigin3D
     [Export] public float SnapTurnDegrees { get; set; } = 35.0f;
     [Export] public float SnapTurnDeadzone { get; set; } = 0.7f;
     [Export] public float MoveDeadzone { get; set; } = 0.1f;
+    [Export] public bool DebugLogging { get; set; } = false;
 
     private XRCamera3D? _camera;
     private XRController3D? _leftController;
@@ -30,7 +31,7 @@ public partial class XRMovement : XROrigin3D
     {
         if (_camera is null || _leftController is null || _rightController is null) return;
 
-        if (_diagFrames++ % 60 == 0)
+        if (DebugLogging && _diagFrames++ % 60 == 0)
         {
             var lStick = _leftController.GetVector2("primary");
             var rStick = _rightController.GetVector2("primary");

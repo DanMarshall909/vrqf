@@ -79,6 +79,12 @@ public partial class Main : Node3D
         if (GetNodeOrNull<WorldEnvironment>("WorldEnvironment")?.Environment is Environment env)
             env.BackgroundMode = on ? Environment.BGMode.ClearColor : Environment.BGMode.Sky;
 
+        if (GetNodeOrNull<ReflectionProbe>("ReflectionProbe") is ReflectionProbe probe)
+        {
+            probe.UpdateMode = ReflectionProbe.UpdateModeEnum.Always;
+            probe.SetDeferred(ReflectionProbe.PropertyName.UpdateMode, (int)ReflectionProbe.UpdateModeEnum.Once);
+        }
+
         GD.Print(on ? "vrqf AR — passthrough ON" : "vrqf AR — passthrough OFF (VR)");
     }
 

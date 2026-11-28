@@ -29,25 +29,45 @@ func _run() -> void:
 		quit(1)
 		return
 
-	await create_timer(0.4).timeout
-	var progress: float = material.get_shader_parameter("morph")
-	if progress <= 0.05 or progress >= 1.0:
-		push_error("Expected the fractal to morph without input, got %.3f" % progress)
+	var default_hold = active.get("MorphHoldSeconds")
+	if default_hold == null or float(default_hold) <= 0.0:
+		push_error("Expected MorphHoldSeconds > 0 by default for fractal dwell, got %s" % [default_hold])
 		quit(1)
 		return
 
-	await create_timer(3.2).timeout
+	active.set("MorphHoldSeconds", 0.5)
+	active.set("MorphTransitionSeconds", 1.2)
+	active.call("CycleFractal", 0)
+	first_type = material.get_shader_parameter("fractal_type")
+	first_target = material.get_shader_parameter("morph_target")
+
+	await create_timer(0.25).timeout
+	var dwell_progress: float = material.get_shader_parameter("morph")
+	if dwell_progress > 0.001:
+		push_error("Expected the fractal to dwell before morphing, got %.3f" % dwell_progress)
+		quit(1)
+		return
+
+	await create_timer(0.55).timeout
+	var progress: float = material.get_shader_parameter("morph")
+	if progress <= 0.01 or progress >= 0.95:
+		push_error("Expected the fractal to morph smoothly after dwell, got %.3f" % progress)
+		quit(1)
+		return
+
+	await create_timer(1.10).timeout
 	var new_type: int = material.get_shader_parameter("fractal_type")
 	var new_target: int = material.get_shader_parameter("morph_target")
-	if new_type != first_target or new_target == new_type:
-		push_error("Expected morph to advance to the next distinct type, got %d -> %d" % [new_type, new_target])
+	var next_dwell: float = material.get_shader_parameter("morph")
+	if new_type != first_target or new_target == new_type or next_dwell > 0.001:
+		push_error("Expected morph to advance and dwell on the next distinct type, got %d -> %d (morph=%.3f)" % [new_type, new_target, next_dwell])
 		quit(1)
 		return
 
-	print("PASS: the single fractal morphs and advances without input")
-	active.call("AdjustMorph", -0.2)
+	print("PASS: the single fractal dwells, eases, and advances without input")
+	active.call("AdjustMorph", 0.25)
 	var manual_amount: float = material.get_shader_parameter("morph")
-	await create_timer(0.4).timeout
+	await create_timer(0.3).timeout
 	var held_amount: float = material.get_shader_parameter("morph")
 	if absf(held_amount - manual_amount) > 0.02:
 		push_error("Manual morph amount did not stay in place: %.3f -> %.3f" % [manual_amount, held_amount])
@@ -62,10 +82,10 @@ func _run() -> void:
 	release_key.keycode = KEY_SPACE
 	release_key.pressed = false
 	Input.parse_input_event(release_key)
-	await create_timer(0.4).timeout
+	await create_timer(0.3).timeout
 	var resumed_amount: float = material.get_shader_parameter("morph")
 	if resumed_amount <= held_amount + 0.05:
-		push_error("Auto morph did not resume after manual adjustment")
+		push_error("Auto morph did not resume immediately after manual adjustment: %.3f -> %.3f" % [held_amount, resumed_amount])
 		quit(1)
 		return
 
@@ -91,14 +111,14 @@ func _run() -> void:
 
 	auto_button.pressed.emit()
 	var paused_amount: float = material.get_shader_parameter("morph")
-	await create_timer(0.4).timeout
+	await create_timer(0.3).timeout
 	if absf(material.get_shader_parameter("morph") - paused_amount) > 0.02:
 		push_error("Wrist menu did not pause automatic morphing")
 		quit(1)
 		return
 
 	auto_button.pressed.emit()
-	await create_timer(0.4).timeout
+	await create_timer(0.3).timeout
 	if material.get_shader_parameter("morph") <= paused_amount + 0.05:
 		push_error("Wrist menu did not resume automatic morphing")
 		quit(1)
