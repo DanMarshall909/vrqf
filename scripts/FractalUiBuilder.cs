@@ -410,6 +410,15 @@ public static class FractalUiBuilder
         row.AddThemeConstantOverride("separation", 6);
         parent.AddChild(row);
 
+        ButtonGroup? group = null;
+        foreach (var spec in rowItem.Buttons)
+        {
+            if (spec.ToggleMode)
+            {
+                group ??= new ButtonGroup { AllowUnpress = false };
+            }
+        }
+
         foreach (var spec in rowItem.Buttons)
         {
             var s = spec;
@@ -418,12 +427,20 @@ public static class FractalUiBuilder
                 Text = s.ReadText(),
                 TooltipText = s.TooltipText,
                 ToggleMode = s.ToggleMode,
+                ButtonGroup = s.ToggleMode ? group : null,
                 SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
                 CustomMinimumSize = new Vector2(0, mode == UiMode.Desktop ? 30 : 36),
             };
             if (mode == UiMode.VrWrist)
                 btn.AddThemeFontSizeOverride("font_size", 17);
-            btn.Pressed += () => s.OnPressed();
+            if (s.ToggleMode && s.IsPressed is not null)
+                btn.SetPressedNoSignal(s.IsPressed());
+            btn.Pressed += () =>
+            {
+                s.OnPressed();
+                if (s.ToggleMode && s.IsPressed is not null)
+                    btn.SetPressedNoSignal(s.IsPressed());
+            };
             row.AddChild(btn);
 
             view.RegisterUpdater(() =>

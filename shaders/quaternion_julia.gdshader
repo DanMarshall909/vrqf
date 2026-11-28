@@ -37,7 +37,7 @@ uniform float material_emission : hint_range(0.0, 2.0) = 1.0;
 uniform int max_steps = 96;
 uniform int iterations = 8;
 uniform float epsilon = 0.0012;
-uniform float morph_speed = 0.25;    // animation rate for ALL fractals (0 = frozen)
+uniform float morph_speed = 0.25;    // animation rate (integrated into anim_phase by FractalController)
 uniform float anim_phase = 0.0;      // integrated animation phase (pausable)
 uniform float shape = 0.0;           // per-fractal shape parameter (scrubbed)
 uniform sampler2D palette_tex : source_color, hint_default_white;
@@ -366,7 +366,7 @@ float fractal_radius(int type) {
 }
 
 // Distance estimator for one fractal. `fp`/`fp4` set its per-formula parameters,
-// `shape` modulates around them, and `anim` (= TIME * morph_speed) animates it.
+// `shape` modulates around them, and `anim` (= anim_phase) animates it.
 float de(int type, vec3 p, float anim, vec4 fp, float fp4, out float trap) {
 	if (type == 1) return mandelbulb_de(p, clamp(fp.x + 4.0 * sin(shape) + sin(anim), 1.5, 16.0), fp.y, fp.z, trap);
 	if (type == 2) {

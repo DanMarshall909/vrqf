@@ -17,20 +17,24 @@ func _run() -> void:
 	var wrist: Node = scene.get_node("XROrigin3D/LeftController/WristMenu")
 	var wrist_tabs := _find_tabs(wrist)
 
-	# 1. Pause morph & Pause anim buttons on Material, Fractal, and Params tabs.
-	for tab_name in ["Material", "Fractal", "Params"]:
+	# 1. Pause morph & Pause anim buttons on Material, Fractal, Params, and Morph tabs.
+	for tab_name in ["Material", "Fractal", "Params", "Morph"]:
 		_select_tab(desktop_tabs, tab_name)
 		_select_tab(wrist_tabs, tab_name)
 		await process_frame
-		var d_morph := _find_button(desktop_tabs.get_node(tab_name), "Pause or resume automatic morphing")
 		var d_anim := _find_button(desktop_tabs.get_node(tab_name), "Pause or resume fractal shape animation")
-		var w_morph := _find_button(wrist_tabs.get_node(tab_name), "Pause or resume automatic morphing")
 		var w_anim := _find_button(wrist_tabs.get_node(tab_name), "Pause or resume fractal shape animation")
-		if d_morph == null or d_anim == null or w_morph == null or w_anim == null \
-				or not _inside_viewport(w_morph) or not _inside_viewport(w_anim):
-			push_error("Missing or clipped Pause morph / Pause anim controls on tab %s" % tab_name)
+		if d_anim == null or w_anim == null or not _inside_viewport(w_anim):
+			push_error("Missing or clipped Pause anim control on tab %s" % tab_name)
 			quit(1)
 			return
+		if tab_name != "Morph":
+			var d_morph := _find_button(desktop_tabs.get_node(tab_name), "Pause or resume automatic morphing")
+			var w_morph := _find_button(wrist_tabs.get_node(tab_name), "Pause or resume automatic morphing")
+			if d_morph == null or w_morph == null or not _inside_viewport(w_morph):
+				push_error("Missing or clipped Pause morph control on tab %s" % tab_name)
+				quit(1)
+				return
 
 	# Verify morph pause & resume via Fractal tab button.
 	_select_tab(desktop_tabs, "Fractal")
@@ -105,7 +109,33 @@ func _run() -> void:
 		push_error("anim_phase did not resume advancing from paused value")
 		quit(1)
 		return
-	print("PASS: morph and animation pause/resume controls work across desktop and VR")
+
+	# Verify K keyboard shortcut pauses & resumes anim_phase cleanly without changing SpeedValue.
+	_send_key(KEY_K)
+	await process_frame
+	if not bool(active.get("AnimationPaused")) or pause_anim_btn.text != "Resume anim" \
+			or absf(float(active.get("SpeedValue")) - initial_speed) > 0.001:
+		push_error("KEY_K did not pause animation cleanly")
+		quit(1)
+		return
+	var k_paused_phase = float(material.get_shader_parameter("anim_phase"))
+	await create_timer(0.25).timeout
+	if absf(float(material.get_shader_parameter("anim_phase")) - k_paused_phase) > 0.0001:
+		push_error("anim_phase continued advancing after KEY_K pause")
+		quit(1)
+		return
+	_send_key(KEY_K)
+	await process_frame
+	if bool(active.get("AnimationPaused")) or pause_anim_btn.text != "Pause anim":
+		push_error("Second KEY_K did not resume animation")
+		quit(1)
+		return
+	await create_timer(0.25).timeout
+	if float(material.get_shader_parameter("anim_phase")) <= k_paused_phase + 0.01:
+		push_error("anim_phase did not resume advancing after second KEY_K")
+		quit(1)
+		return
+	print("PASS: morph and animation pause/resume controls (and K shortcut) work across desktop and VR")
 
 	# 2. Dual A/B fractal parameter editing on Params tab.
 	_select_tab(desktop_tabs, "Params")
@@ -127,6 +157,11 @@ func _run() -> void:
 		push_error("Expected default Params slot A (Quaternion Julia)")
 		quit(1)
 		return
+	if not slot_a.button_pressed or slot_b.button_pressed or slot_a.button_group == null or slot_a.button_group.allow_unpress \
+			or not w_slot_a.button_pressed or w_slot_b.button_pressed or w_slot_a.button_group == null or w_slot_a.button_group.allow_unpress:
+		push_error("A/B toggle buttons must use a non-unpressable ButtonGroup with A pressed initially")
+		quit(1)
+		return
 
 	# Edit A slightly so we can verify A stays preserved across B edits and B reset.
 	_find_slider(desk_params, "C real (w)").value = 0.65
@@ -137,6 +172,19 @@ func _run() -> void:
 	await process_frame
 	if not bool(active.get("EditingMorphTarget")):
 		push_error("Clicking B · Target did not set EditingMorphTarget=true")
+		quit(1)
+		return
+	var desk_b_btn := _find_button(desk_params, "Edit target fractal (B) parameters")
+	var desk_a_btn := _find_button(desk_params, "Edit source fractal (A) parameters")
+	var wrist_b_btn := _find_button(wrist_params, "Edit target fractal (B) parameters")
+	if not desk_b_btn.button_pressed or desk_a_btn.button_pressed or not wrist_b_btn.button_pressed:
+		push_error("Switching to slot B did not update button_pressed state on Desktop or VR")
+		quit(1)
+		return
+	desk_b_btn.pressed.emit()
+	await process_frame
+	if not desk_b_btn.button_pressed:
+		push_error("Clicking already-active B · Target unpressed the active toggle button")
 		quit(1)
 		return
 	if _find_slider(desk_params, "C real (w)") != null or _find_slider(desk_params, "Power") == null \
@@ -214,6 +262,17 @@ func _run() -> void:
 		return
 	print("PASS: all 4 VR wrist menu tabs fit strictly inside the SubViewport")
 	quit(0)
+
+
+func _send_key(code: Key) -> void:
+	var press := InputEventKey.new()
+	press.keycode = code
+	press.pressed = true
+	Input.parse_input_event(press)
+	var release := InputEventKey.new()
+	release.keycode = code
+	release.pressed = false
+	Input.parse_input_event(release)
 
 
 func _select_tab(tabs: TabContainer, tab_name: String) -> void:
